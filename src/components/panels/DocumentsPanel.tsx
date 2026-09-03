@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AddDocuments } from "@/components/AddDocuments";
 import { Icon } from "@/components/icons";
 import {
   Badge,
@@ -28,19 +29,28 @@ import { effectiveCategoryId, type DocumentView } from "@/lib/types";
 
 type Filter = "all" | "unread" | "unreadable" | "review" | "flagged";
 
+/** One stage of the pipeline, as it is reported by the server. */
+type Step = { label: string; detail?: string; done: boolean };
+
 /**
  * One file's journey through an upload, as the console shows it.
  *
- * `queued` is a distinct stage from `reading` on purpose. Documents are read
- * one at a time, so showing five rows all saying "reading" would be a picture
- * of something that is not happening — four of them are waiting. The point of
- * this list is to say truthfully where each file is.
+ * `queued` is a distinct stage from `working` on purpose. Documents are read
+ * one at a time, so showing five rows all claiming to be in progress would be
+ * a picture of something that is not happening — four of them are waiting.
+ *
+ * `steps` is the part that matters. A badge that says "reading" for thirty
+ * seconds tells you no more than a spinner does; the list of what has actually
+ * been done — the cache checked, the page read, the vendor and total that came
+ * off it, the category chosen, the answer saved — is the difference between
+ * watching work happen and waiting for something to stop being stuck.
  */
 type Progress = {
   filename: string;
-  stage: "uploading" | "queued" | "reading" | "done";
+  stage: "uploading" | "queued" | "working" | "done";
   status?: string;
   detail?: string;
+  steps: Step[];
 };
 
 /**
@@ -62,6 +72,7 @@ export function DocumentsPanel() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [deleting, setDeleting] = useState<DocumentView | null>(null);
+  const [adding, setAdding] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -81,29 +92,44 @@ export function DocumentsPanel() {
     load();
   }, [load]);
 
-  async function run(label: string, path: string) {
-    setBusy(label);
-    setNote("");
-    try {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      const value = await response.json();
-      if (!response.ok) throw new Error(value?.error ?? `${label} responded ${response.status}.`);
-      setNote(
-        label === "Extract"
-          ? `Read ${value.extracted ?? 0} of ${value.run ?? 0}. ${value.unreadable ?? 0} could not be read — they are on the flag list with their filenames, not dropped.`
-          : `Sorted ${value.classified ?? 0}. ${value.needsReview ?? 0} need a person's decision.`,
-      );
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : `${label} failed.`);
-    } finally {
-      setBusy(null);
-    }
-  }
+  /**
+   * Pull in anything dropped straight into the shared Drive folder.
+   *
+   * Not everything arrives through this screen. Somebody can drag an invoice
+   * into the workspace folder from Drive itself, or a colleague can put one
+   * there, and before this ran automatically those documents simply never
+   * appeared — the sweep lived on a separate screen that a person had to know
+   * to visit and remember to press.
+   *
+   * Fired once per mount and deliberately not awaited by the first render: the
+   * table draws from what is already on the register, and anything the sweep
+   * finds arrives a moment later. A slow round trip to Drive should never be
+   * the reason this screen is blank.
+   */
+  const swept = useRef(false);
+  useEffect(() => {
+    if (swept.current) return;
+    swept.current = true;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/drive/sync", { method: "POST" });
+        if (!response.ok) return;
+        const value = await response.json();
+        if ((value.ingested ?? 0) > 0) {
+          setNote(
+            `${value.ingested} new file${value.ingested === 1 ? "" : "s"} found in the shared Drive ` +
+              `folder and added. Use "Read waiting" to read them.`,
+          );
+          await load();
+        }
+      } catch {
+        // A sweep that could not run leaves the register exactly as it was.
+        // Saying so on a screen full of documents would be noise; the Drive
+        // connection has its own error path when something is actually broken.
+      }
+    })();
+  }, [load]);
 
   /**
    * Upload, then walk each document through reading, one at a time.
@@ -114,65 +140,74 @@ export function DocumentsPanel() {
    * happening at all. Now each file appears the moment its bytes are on
    * Drive, and its row changes as it is read.
    */
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
+  /**
+   * Read documents that arrived without going through this screen.
+   *
+   * Anything uploaded or imported here is read on arrival, so this button only
+   * appears when something got onto the register another way — synced straight
+   * into the Drive folder, or left behind by a read that failed. It shows the
+   * same live progress as an upload rather than a spinner and a count.
+   */
+  async function readUnread() {
+    const waiting = (views ?? []).filter((view) => !view.extraction);
+    if (waiting.length === 0) return;
 
-    const names = Array.from(files).map((file) => file.name);
+    setBusy("Unread");
+    setError("");
+    setNote("");
+    setProgress(waiting.map((view) => ({ filename: view.doc.filename, stage: "queued", steps: [] })));
+
+    try {
+      for (const [index, view] of waiting.entries()) {
+        await processOne(view.doc.id, index);
+        await load();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Put files on Drive, then walk each one through the pipeline in the open.
+   *
+   * Two phases, because they answer two different questions. The upload
+   * answers "did my file arrive" and has to be fast; the processing answers
+   * "what is it" and cannot be. Rolling both into one request meant a minute
+   * of silence and no way to tell the two apart.
+   *
+   * The processing phase reads a stream of steps rather than waiting for a
+   * verdict, so what appears on screen is the work itself — the cache being
+   * checked, the page being read, the vendor and total that came off it, the
+   * category, the save. It runs automatically the moment the upload lands;
+   * nobody has to press anything for their documents to be read.
+   */
+  async function ingest(sources: { file: File; name: string }[]) {
+    if (sources.length === 0) return;
+
     setBusy("Upload");
     setError("");
     setNote("");
-    setProgress(names.map((filename) => ({ filename, stage: "uploading" })));
+    setProgress(sources.map(({ name }) => ({ filename: name, stage: "uploading", steps: [] })));
 
     try {
       const form = new FormData();
-      for (const file of Array.from(files)) form.append("file", file);
+      for (const { file } of sources) form.append("file", file);
 
       const response = await fetch("/api/documents", { method: "POST", body: form });
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error ?? `Upload responded ${response.status}.`);
 
       const uploaded: { id: string; filename: string }[] = value.documents ?? [];
-      setProgress(uploaded.map((row) => ({ filename: row.filename, stage: "queued" })));
+      setProgress(uploaded.map((row) => ({ filename: row.filename, stage: "queued", steps: [] })));
       if (value.note) setNote(value.note);
 
-      // The list is already visible at this point, so refreshing it now means
-      // the documents show up before any of them has been read — which is the
-      // answer to "where did my file go".
+      // The list is refreshed before anything has been read, so the documents
+      // appear in the table straight away — the answer to "where did my file
+      // go" arrives before the answer to "what is in it".
       await load();
 
       for (const [index, row] of uploaded.entries()) {
-        setProgress((current) =>
-          current.map((entry, i) => (i === index ? { ...entry, stage: "reading" } : entry)),
-        );
-        try {
-          const result = await fetch(`/api/documents/${row.id}/process`, { method: "POST" });
-          const outcome = await result.json();
-          setProgress((current) =>
-            current.map((entry, i) =>
-              i === index
-                ? {
-                    ...entry,
-                    stage: "done",
-                    status: result.ok ? outcome.status : "failed",
-                    detail: result.ok ? outcome.detail : (outcome?.error ?? "Could not be read."),
-                  }
-                : entry,
-            ),
-          );
-        } catch (cause) {
-          setProgress((current) =>
-            current.map((entry, i) =>
-              i === index
-                ? {
-                    ...entry,
-                    stage: "done",
-                    status: "failed",
-                    detail: cause instanceof Error ? cause.message : "Could not be read.",
-                  }
-                : entry,
-            ),
-          );
-        }
+        await processOne(row.id, index);
         await load();
       }
     } catch (cause) {
@@ -181,6 +216,135 @@ export function DocumentsPanel() {
     } finally {
       setBusy(null);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  /**
+   * Documents that arrived from Drive or Gmail, walked through the same steps.
+   *
+   * An import has already put the bytes in the workspace by the time this is
+   * called, so there is no upload phase — but the reading is identical, and so
+   * is what a person sees. A file that came from a mailbox should not be a
+   * more mysterious arrival than one dragged off a desktop.
+   */
+  async function watch(documents: { id: string; filename: string }[], importNote?: string) {
+    if (documents.length === 0) {
+      if (importNote) setNote(importNote);
+      return;
+    }
+
+    setBusy("Upload");
+    setError("");
+    setNote(importNote ?? "");
+    setProgress(documents.map((row) => ({ filename: row.filename, stage: "queued", steps: [] })));
+
+    try {
+      await load();
+      for (const [index, row] of documents.entries()) {
+        await processOne(row.id, index);
+        await load();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Read one document, rendering each step of the pipeline as it is reported. */
+  async function processOne(docId: string, index: number) {
+    const at = (fn: (entry: Progress) => Progress) =>
+      setProgress((current) => current.map((entry, i) => (i === index ? fn(entry) : entry)));
+
+    at((entry) => ({ ...entry, stage: "working", steps: [] }));
+
+    try {
+      const response = await fetch(`/api/documents/${docId}/process`, { method: "POST" });
+      if (!response.body) throw new Error(`Processing responded ${response.status} with no body.`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let settled = false;
+
+      // NDJSON: one object per line, and the last chunk may end mid-line, so
+      // the tail is carried over rather than parsed as if it were complete.
+      for (;;) {
+        const { done, value: chunk } = await reader.read();
+        if (chunk) buffer += decoder.decode(chunk, { stream: true });
+
+        let cut = buffer.indexOf("\n");
+        while (cut !== -1) {
+          const line = buffer.slice(0, cut).trim();
+          buffer = buffer.slice(cut + 1);
+          cut = buffer.indexOf("\n");
+          if (!line) continue;
+
+          let event: {
+            type?: string;
+            label?: string;
+            detail?: string;
+            terminal?: boolean;
+            outcome?: { status?: string; detail?: string };
+            error?: string;
+          };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue; // A half-written line is not worth failing the upload over.
+          }
+
+          if (event.type === "step") {
+            at((entry) => ({
+              ...entry,
+              // Everything before the newest step is finished by definition:
+              // the server only reports a stage once the one before it returned.
+              steps: [
+                ...entry.steps.map((step) => ({ ...step, done: true })),
+                { label: event.label ?? "", detail: event.detail, done: Boolean(event.terminal) },
+              ],
+            }));
+          } else if (event.type === "outcome") {
+            settled = true;
+            at((entry) => ({
+              ...entry,
+              stage: "done",
+              status: event.outcome?.status ?? "computed",
+              detail: event.outcome?.detail,
+              steps: entry.steps.map((step) => ({ ...step, done: true })),
+            }));
+          } else if (event.type === "error") {
+            settled = true;
+            at((entry) => ({
+              ...entry,
+              stage: "done",
+              status: "failed",
+              detail: event.error,
+              steps: entry.steps.map((step) => ({ ...step, done: true })),
+            }));
+          }
+        }
+
+        if (done) break;
+      }
+
+      // A stream that ended without an outcome is a failure, not a success
+      // with nothing to say — the connection dropped mid-document.
+      if (!settled) {
+        at((entry) => ({
+          ...entry,
+          stage: "done",
+          status: "failed",
+          detail: "The connection closed before this document finished.",
+          steps: entry.steps.map((step) => ({ ...step, done: true })),
+        }));
+      }
+    } catch (cause) {
+      at((entry) => ({
+        ...entry,
+        stage: "done",
+        status: "failed",
+        detail: cause instanceof Error ? cause.message : "Could not be read.",
+        steps: entry.steps.map((step) => ({ ...step, done: true })),
+      }));
     }
   }
 
@@ -256,42 +420,7 @@ export function DocumentsPanel() {
       {note && <Note>{note}</Note>}
 
       {progress.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] font-medium">
-              {progress.every((row) => row.stage === "done")
-                ? `Finished ${progress.length} file${progress.length === 1 ? "" : "s"}`
-                : `Working through ${progress.length} file${progress.length === 1 ? "" : "s"}…`}
-            </p>
-            {progress.every((row) => row.stage === "done") && (
-              <Button size="sm" variant="ghost" onClick={() => setProgress([])}>
-                Dismiss
-              </Button>
-            )}
-          </div>
-          <ul className="mt-3 space-y-1.5">
-            {progress.map((row, i) => (
-              <li key={`${row.filename}-${i}`} className="flex items-center gap-2.5 text-[12.5px]">
-                <span className="w-24 shrink-0">
-                  <Badge state={row.stage === "done" ? (row.status ?? "computed") : row.stage} dot />
-                </span>
-                <span className="min-w-0 flex-1 truncate font-medium" title={row.filename}>
-                  {row.filename}
-                </span>
-                <span className="hidden max-w-[45%] truncate text-ink-3 sm:block" title={row.detail}>
-                  {row.detail ??
-                    (row.stage === "uploading"
-                      ? "sending to the Drive workspace"
-                      : row.stage === "queued"
-                        ? "on Drive, waiting its turn"
-                        : row.stage === "reading"
-                          ? "reading the page and placing it on the chart"
-                          : "")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ProcessView progress={progress} onDismiss={() => setProgress([])} />
       )}
 
       <Toolbar>
@@ -313,28 +442,23 @@ export function DocumentsPanel() {
           className="w-full sm:w-64"
         />
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,image/png,image/jpeg"
-            multiple
-            hidden
-            onChange={(event) => upload(event.target.files)}
-          />
-          <Button
-            variant="secondary"
-            busy={busy === "Upload"}
-            onClick={() => fileRef.current?.click()}
-          >
+          {/* One button, three sources. Reading happens on arrival, so there is
+              nothing to press afterwards — the buttons that used to say "read
+              them" and "sort them" described steps the app now takes itself. */}
+          <Button variant="primary" busy={busy === "Upload"} onClick={() => setAdding(true)}>
             <Icon name="upload" className="size-3.5" />
             Add documents
           </Button>
-          <Button variant="secondary" busy={busy === "Extract"} onClick={() => run("Extract", "/api/extract")}>
-            Read them
-          </Button>
-          <Button variant="primary" busy={busy === "Categorise"} onClick={() => run("Categorise", "/api/classify")}>
-            Sort them
-          </Button>
+          {counts.unread > 0 && (
+            <Button
+              variant="secondary"
+              busy={busy === "Unread"}
+              onClick={readUnread}
+              title="Documents that arrived in the Drive folder directly have not been read yet."
+            >
+              Read {counts.unread} waiting
+            </Button>
+          )}
         </div>
       </Toolbar>
 
@@ -477,6 +601,13 @@ export function DocumentsPanel() {
         {open && <DocumentDetail view={open} currency={currency} />}
       </Drawer>
 
+      <AddDocuments
+        open={adding}
+        onClose={() => setAdding(false)}
+        onUpload={(files) => ingest(files.map((file) => ({ file, name: file.name })))}
+        onImported={(documents, importNote) => watch(documents, importNote)}
+      />
+
       <Confirm
         open={Boolean(deleting)}
         title={deleting ? `Delete ${deleting.doc.filename}?` : "Delete this document?"}
@@ -504,6 +635,101 @@ export function DocumentsPanel() {
         onCancel={() => setDeleting(null)}
       />
     </div>
+  );
+}
+
+/**
+ * What is happening to the documents just added, while it happens.
+ *
+ * The file being worked on is expanded and shows every step the server
+ * reports; the ones already finished collapse to a single line with their
+ * result. That shape is deliberate — a list of ten expanded files is as
+ * unreadable as no list at all, and the only one anybody is watching is the
+ * one that is moving.
+ */
+function ProcessView({ progress, onDismiss }: { progress: Progress[]; onDismiss: () => void }) {
+  const finished = progress.filter((row) => row.stage === "done").length;
+  const allDone = finished === progress.length;
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+        {!allDone && (
+          <span
+            aria-hidden
+            className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-border border-t-brand"
+          />
+        )}
+        <p className="text-[13px] font-medium">
+          {allDone
+            ? `Finished ${progress.length} document${progress.length === 1 ? "" : "s"}`
+            : `Reading ${finished + 1} of ${progress.length}…`}
+        </p>
+        <span className="ml-auto flex items-center gap-2">
+          {!allDone && (
+            <span className="text-[12px] text-ink-3">
+              This runs on its own — nothing to press.
+            </span>
+          )}
+          {allDone && (
+            <Button size="sm" variant="ghost" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          )}
+        </span>
+      </header>
+
+      <ul className="divide-y divide-border">
+        {progress.map((row, i) => (
+          <li key={`${row.filename}-${i}`} className="px-4 py-2.5">
+            <div className="flex items-center gap-2.5 text-[12.5px]">
+              <span className="w-[86px] shrink-0">
+                <Badge
+                  state={row.stage === "done" ? (row.status ?? "computed") : row.stage}
+                  label={row.stage === "working" ? "reading" : undefined}
+                  dot
+                />
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium" title={row.filename}>
+                {row.filename}
+              </span>
+              {row.stage === "done" && row.detail && (
+                <span className="hidden max-w-[46%] truncate text-ink-3 sm:block" title={row.detail}>
+                  {row.detail}
+                </span>
+              )}
+              {row.stage === "queued" && <span className="text-ink-3">waiting its turn</span>}
+              {row.stage === "uploading" && (
+                <span className="text-ink-3">sending to the Drive workspace</span>
+              )}
+            </div>
+
+            {row.steps.length > 0 && row.stage !== "done" && (
+              <ol className="mt-2 ml-[86px] space-y-1.5 border-l border-border pl-3.5">
+                {row.steps.map((step, j) => (
+                  <li key={`${step.label}-${j}`} className="flex items-baseline gap-2 text-[12px]">
+                    <span
+                      aria-hidden
+                      className={`-ml-[19px] size-1.5 shrink-0 translate-y-[-1px] rounded-full ${
+                        step.done ? "bg-ok-ink" : "animate-pulse bg-brand"
+                      }`}
+                    />
+                    <span className={step.done ? "text-ink-3" : "font-medium text-ink"}>
+                      {step.label}
+                    </span>
+                    {step.detail && (
+                      <span className="min-w-0 truncate text-ink-3" title={step.detail}>
+                        {step.detail}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

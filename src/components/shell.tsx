@@ -28,12 +28,6 @@ export type Section = {
 export const SECTIONS: Section[] = [
   { id: "overview", label: "Overview", icon: "overview", blurb: "Where the period stands" },
   {
-    id: "workspace",
-    label: "Workspace",
-    icon: "drive",
-    blurb: "The shared Drive folder, and running the period through it",
-  },
-  {
     id: "documents",
     label: "Documents",
     icon: "documents",

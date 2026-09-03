@@ -30,14 +30,29 @@ const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 
 /**
- * `drive.file` rather than `drive`.
+ * Two grants, kept deliberately apart.
  *
- * It grants access only to files this app creates or that the user explicitly
- * opens with it — not the whole Drive. The tax workspace is the one folder we
- * were pointed at, and a token that could read every document the owner has is
- * a larger blast radius than this feature needs.
+ * **The workspace grant** is this app's own and asks for `drive.file` alone —
+ * access to files this app creates or that are explicitly opened with it, and
+ * nothing else in anybody's Drive. It owns the shared tax folder, and that is
+ * the whole of its job. It is set up once by whoever runs the app.
+ *
+ * **The account grant** is per person and lives in `google-account.ts`: the
+ * read and send scopes below, used when somebody imports an invoice out of
+ * their own Drive or their own mailbox, or emails the finished package from
+ * their own address.
+ *
+ * They are separate because widening the workspace token would be a real cost
+ * for no gain. Every user's documents are written through it, so a mailbox
+ * scope on it would mean one token that can read one person's mail on behalf
+ * of everybody — and it would force whoever set the app up to re-approve a
+ * permission the workspace never uses. The scopes below are never attached to
+ * this token; they belong to whichever person actually consented to them.
  */
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+export const DRIVE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 export type DriveFile = {
   id: string;

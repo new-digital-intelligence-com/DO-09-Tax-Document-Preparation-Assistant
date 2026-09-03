@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { record } from "./audit";
+import { categoryName } from "./categories";
 import { classifyDocument, getClassification } from "./classify";
 import { getDocument, ingestMany, listDocuments, removeDocument } from "./documents";
 import {
@@ -16,6 +17,7 @@ import {
 import { extractDocument } from "./extract";
 import { activePeriod, preparer } from "./settings";
 import { readStore, writeStore } from "./store";
+import { effectiveCategoryId } from "./types";
 import type { Classification, Extraction, SourceDocument } from "./types";
 
 /**
@@ -57,6 +59,28 @@ export type CachedResult = {
   modelId?: string;
   extraction?: Extraction;
   classification?: Classification;
+};
+
+/**
+ * One thing that happened while a document was being processed, as it happens.
+ *
+ * The pipeline is four network round trips and the better part of half a
+ * minute, and for all of that time the only thing a person could previously
+ * see was a spinner. That is not a cosmetic problem: somebody who cannot tell
+ * whether their file arrived goes looking for it, uploads it again, or decides
+ * the app is broken. These are emitted as each stage begins and ends, so the
+ * console can show what is actually being done rather than that something is.
+ *
+ * `detail` carries the finding, not a status word — "Anthropic, PBC · $105.00"
+ * rather than "extraction complete". A progress line that says nothing about
+ * the document is a progress line nobody reads twice.
+ */
+export type ProcessStep = {
+  stage: "cache" | "reading" | "read" | "declined" | "categorising" | "categorised" | "saving" | "done";
+  label: string;
+  detail?: string;
+  /** Set when this step is the end of the road for the document. */
+  terminal?: boolean;
 };
 
 export type DocumentOutcome = {
@@ -289,9 +313,29 @@ async function applyCachedMany(rows: { docId: string; cached: CachedResult }[]):
  */
 export async function processDocument(
   docId: string,
-  options: { force?: boolean; index?: CacheIndex; actor?: string } = {},
+  options: {
+    force?: boolean;
+    index?: CacheIndex;
+    actor?: string;
+    /**
+     * Called as each stage begins and ends. Failing to report progress must
+     * never fail the work, so anything thrown in here is swallowed — a
+     * disconnected browser is the common case and the document should still
+     * finish being read.
+     */
+    onStep?: (step: ProcessStep) => void | Promise<void>;
+  } = {},
 ): Promise<DocumentOutcome> {
   const actor = options.actor ?? preparer();
+
+  const step = async (value: ProcessStep) => {
+    try {
+      await options.onStep?.(value);
+    } catch {
+      // See above: the reader going away is not the document's problem.
+    }
+  };
+
   const doc = await getDocument(docId);
   if (!doc) {
     return {
@@ -308,6 +352,11 @@ export async function processDocument(
 
   // 1. The cache, when Drive is reachable.
   if (!options.force && driveReady) {
+    await step({
+      stage: "cache",
+      label: "Checking whether this was read before",
+      detail: `Looking for ${doc.sha256.slice(0, 12)}… in the Drive output folder`,
+    });
     const cached = await readCachedResult(doc.sha256, options.index);
     if (cached?.extraction) {
       await applyCachedMany([{ docId, cached }]);
@@ -322,6 +371,14 @@ export async function processDocument(
         periodId: doc.periodId,
         docId,
       });
+      await step({
+        stage: "done",
+        label: "Already read once — restored from Drive",
+        detail:
+          `${cached.extraction.vendor ?? "Vendor not read"} · processed ` +
+          `${cached.processedAt.slice(0, 10)}. No model call was made.`,
+        terminal: true,
+      });
       return {
         ...base,
         status: "reused",
@@ -335,10 +392,22 @@ export async function processDocument(
   }
 
   // 2. Read it.
+  await step({
+    stage: "reading",
+    label: "Reading the page",
+    detail: `Sending ${doc.filename} to the model to pull out vendor, dates and amounts`,
+  });
+
   let extraction: Extraction;
   try {
     extraction = await extractDocument(docId, actor);
   } catch (error) {
+    await step({
+      stage: "done",
+      label: "Could not be read",
+      detail: error instanceof Error ? error.message : "The document could not be read.",
+      terminal: true,
+    });
     return {
       ...base,
       status: "failed",
@@ -349,7 +418,27 @@ export async function processDocument(
   // 3. A document that is not a financial record is declined rather than
   //    forced onto the chart. It stays on the register with its reason so the
   //    person who uploaded it can see what happened to it.
+  if (extraction.status === "extracted") {
+    const money =
+      typeof extraction.total === "number"
+        ? `${extraction.currency ?? ""} ${extraction.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim()
+        : "no total found";
+    await step({
+      stage: "read",
+      label: "Read it",
+      detail: [extraction.vendor ?? "vendor not found", money, extraction.issueDate]
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+
   if (extraction.status === "out-of-scope") {
+    await step({
+      stage: "declined",
+      label: "Not a financial document — withdrawn",
+      detail: extraction.statusDetail ?? "Nothing on the page is an invoice, receipt or statement.",
+      terminal: true,
+    });
     await record({
       actor,
       action: "document.declined",
@@ -367,6 +456,12 @@ export async function processDocument(
   }
 
   // 4. Categorise it.
+  await step({
+    stage: "categorising",
+    label: "Choosing a tax category",
+    detail: "Matching what was read against the chart of categories",
+  });
+
   let classification: Classification | undefined;
   try {
     classification = await classifyDocument(docId, actor);
@@ -376,9 +471,23 @@ export async function processDocument(
     classification = await getClassification(docId);
   }
 
+  await step({
+    stage: "categorised",
+    label: classification ? "Categorised" : "Could not categorise it",
+    detail: classification
+      ? `${categoryName(effectiveCategoryId(classification))}` +
+        `${classification.needsReview ? " — flagged for a person to confirm" : ""}`
+      : "It stays on the register as read but unsorted.",
+  });
+
   // 5. Write the answer back so the next run does not pay for it again.
   let storedToDrive = false;
   if (driveReady) {
+    await step({
+      stage: "saving",
+      label: "Saving the result to Drive",
+      detail: "So this document is never read twice",
+    });
     try {
       await writeCachedResult({
         version: RESULT_VERSION,
@@ -409,6 +518,16 @@ export async function processDocument(
       });
     }
   }
+
+  await step({
+    stage: "done",
+    label: extraction.status === "extracted" ? "Done" : "Finished with problems",
+    detail:
+      extraction.status === "extracted"
+        ? `${doc.filename} is on the register${storedToDrive ? " and saved to Drive" : ""}.`
+        : (extraction.statusDetail ?? `Came back ${extraction.status}.`),
+    terminal: true,
+  });
 
   return {
     ...base,

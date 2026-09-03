@@ -1,6 +1,7 @@
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { driveEnv, exchangeCode, forgetWorkspace, workspace } from "@/lib/drive";
+import { connectAccount } from "@/lib/google-account";
 import { record } from "@/lib/audit";
 import { preparer } from "@/lib/settings";
 
@@ -71,6 +72,64 @@ export async function GET(request: Request) {
   const code = query.get("code");
   if (!code) {
     return page("No authorisation code", "<p>Google sent no code back, so there is nothing to exchange.</p>", "bad");
+  }
+
+  /*
+   * Two different connections come back through this one URL.
+   *
+   * `state=user:<id>` is a person connecting their OWN Google account so they
+   * can import from their own Drive and mailbox. Everything else is the app's
+   * own workspace setup, which writes a refresh token to `.env.local`.
+   *
+   * One redirect URI rather than two on purpose: every redirect URI has to be
+   * registered by hand on the Google OAuth client, and adding a second would
+   * mean this feature silently fails for anybody who did not know to go and
+   * register it.
+   */
+  const state = query.get("state") ?? "";
+  if (state.startsWith("user:")) {
+    try {
+      const connection = await connectAccount(code);
+      const granted = [
+        connection.can.driveImport ? "their Drive" : "",
+        connection.can.gmailImport ? "their mail" : "",
+        connection.can.gmailSend ? "sending on their behalf" : "",
+      ].filter(Boolean);
+
+      try {
+        await record({
+          actor: preparer(),
+          action: "google.connected",
+          subject: connection.email ?? "google-account",
+          result: "ok",
+          detail:
+            `${connection.email ?? "A Google account"} was connected to this workspace for ` +
+            `importing documents. Granted: ${granted.join(", ") || "nothing usable"}.`,
+        });
+      } catch {
+        // Not being able to note it does not make the connection any less real.
+      }
+
+      return page(
+        "Account connected",
+        `<p>${connection.email ? `<strong>${connection.email}</strong>` : "The account"} is connected to ` +
+          `this workspace.</p>` +
+          (granted.length > 0
+            ? `<p>You granted access to ${granted.join(", ")}. Only this account is read, and only ` +
+              `the files you pick are imported.</p>`
+            : `<p>No usable permission was granted, so nothing can be imported yet. Connect again ` +
+              `and approve Drive or Gmail access.</p>`) +
+          `<p>Nothing needs restarting — this works immediately.</p>`,
+        granted.length > 0 ? "ok" : "bad",
+      );
+    } catch (cause) {
+      return page(
+        "Could not connect that account",
+        `<p>${cause instanceof Error ? cause.message : "Unknown error"}</p>` +
+          `<p>Nothing was stored. You can <a href="/api/google/connect">try again</a>.</p>`,
+        "bad",
+      );
+    }
   }
 
   /*

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/shell";
 import { ErrorNote } from "@/components/ui";
 import { OverviewPanel } from "@/components/panels/OverviewPanel";
-import { WorkspacePanel } from "@/components/panels/WorkspacePanel";
 import { DocumentsPanel } from "@/components/panels/DocumentsPanel";
 import { CategoriesPanel } from "@/components/panels/CategoriesPanel";
 import { ExceptionsPanel } from "@/components/panels/ExceptionsPanel";
@@ -17,10 +16,10 @@ import type { PrepStatus } from "@/lib/types";
 /**
  * The console.
  *
- * One page holding nine panels, with the section in the query string so a
- * screen can be linked to — "the reconciliation is wrong on this period" is a
- * sentence somebody sends with a URL, and a console that always opens on the
- * overview makes them describe the route instead.
+ * One page holding the panels, with the section in the query string so a screen
+ * can be linked to — "this figure is wrong on the Schedule C" is a sentence
+ * somebody sends with a URL, and a console that always opens on the overview
+ * makes them describe the route instead.
  *
  * The shell owns navigation and the flag count. Each panel fetches its own
  * data: they are read at different moments, cost different amounts, and a
@@ -29,7 +28,6 @@ import type { PrepStatus } from "@/lib/types";
 
 const PANELS: Record<string, () => React.ReactElement> = {
   overview: OverviewPanel,
-  workspace: WorkspacePanel,
   documents: DocumentsPanel,
   categories: CategoriesPanel,
   exceptions: ExceptionsPanel,
@@ -43,11 +41,6 @@ const TITLES: Record<string, { title: string; description: string }> = {
   overview: {
     title: "Overview",
     description: "Where the period stands, and what is waiting on a person.",
-  },
-  workspace: {
-    title: "Workspace",
-    description:
-      "The shared Drive folder. Results are written back to it, so a second run does not pay to read the same document twice.",
   },
   documents: {
     title: "Documents",
@@ -67,7 +60,7 @@ const TITLES: Record<string, { title: string; description: string }> = {
   },
   package: {
     title: "Review package",
-    description: "The handoff: index, drafts, reconciliation and the open items.",
+    description: "The handoff: index, drafts and the open items — sent to the reviewer.",
   },
   ask: { title: "Ask", description: "Question the register. It reads and prepares; it does not file." },
   audit: { title: "Audit", description: "Append-only. Refusals are in here as readily as actions." },

@@ -248,6 +248,7 @@ const STATE_TONE: Record<string, Tone> = {
   declined: "neutral",
   uploading: "info",
   queued: "neutral",
+  working: "warn",
   reading: "warn",
 
   // Exception state — "accepted" and "open" must never look alike. Accepted

@@ -75,10 +75,22 @@ export async function listAudit(filter?: {
   exceptionId?: string;
   action?: string;
   actor?: string;
+  /**
+   * Free text across the detail and the subject.
+   *
+   * The trail is the only place a deleted document survives, and what survives
+   * of it is its filename — written into the detail sentence, not into a field.
+   * Without this the only way to ask "what happened to invoice-42.pdf" is to
+   * already know its id, which is exactly the thing somebody asking that
+   * question does not have. Filtering by action alone is no better: it returns
+   * every deletion in the period and leaves the reader to scan.
+   */
+  query?: string;
   limit?: number;
 }): Promise<AuditEvent[]> {
   const log = await readStore<AuditEvent[]>("audit", []);
   const actor = filter?.actor?.trim().toLowerCase();
+  const query = filter?.query?.trim().toLowerCase();
 
   const matched = log.filter((event) => {
     if (filter?.periodId && event.periodId !== filter.periodId) return false;
@@ -86,6 +98,10 @@ export async function listAudit(filter?: {
     if (filter?.exceptionId && event.exceptionId !== filter.exceptionId) return false;
     if (filter?.action && !event.action.includes(filter.action)) return false;
     if (actor && event.actor.trim().toLowerCase() !== actor) return false;
+    if (query) {
+      const haystack = `${event.detail} ${event.subject} ${event.action}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
     return true;
   });
 

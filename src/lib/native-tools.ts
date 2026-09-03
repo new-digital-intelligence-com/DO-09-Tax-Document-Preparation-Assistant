@@ -1,6 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { modelConfigured } from "./anthropic";
+import { listAudit } from "./audit";
 import { CATEGORIES, categoryName } from "./categories";
 import { categoryTotals } from "./classify";
 import { documentViews, listDocuments, sourceBreakdown } from "./documents";
@@ -107,9 +108,13 @@ export const NATIVE_TOOLS: Anthropic.Tool[] = [
   {
     name: "search_documents",
     description:
-      "Find documents by free text. Matches the filename, the vendor, the invoice number, " +
-      "the payment reference, the extraction notes, the line-item descriptions and the " +
-      "category name. Use this before guessing which document someone means.",
+      "Find documents by free text. Matches on ANY word in the query, not the phrase, across " +
+      "the filename, vendor, vendor address, tax id, invoice number, payment method, extraction " +
+      "notes, every line-item description, the category name and the categorisation rationale. " +
+      "Results come back best-match first, each with the words that actually hit. Use this " +
+      "whenever someone asks whether they have something — a vendor, a subscription, a charge — " +
+      "rather than saying you cannot check. Try a narrower single word before concluding that " +
+      "nothing is there.",
     input_schema: {
       type: "object",
       properties: {
@@ -149,18 +154,48 @@ export const NATIVE_TOOLS: Anthropic.Tool[] = [
     name: "list_exceptions",
     description:
       "The open items: what was flagged, why, with the actual figures and filenames, and " +
-      "the suggested action. Filter by status, kind, severity or document. A 'backdated-" +
-      "document' finding is the one to escalate to the tax manager immediately. Resolving " +
-      "any of these is a human action in the console — this tool only reads them.",
+      "the suggested action. Filter by status, kind, severity or document. Resolving any of " +
+      "these is a human action in the console — this tool only reads them.",
     input_schema: {
       type: "object",
       properties: {
         periodId: { type: "string", description: "Defaults to the active period." },
         status: { type: "string", enum: ["open", "resolved", "accepted"] },
-        kind: { type: "string", description: "One ExceptionKind, e.g. backdated-document." },
+        kind: { type: "string", description: "One ExceptionKind, e.g. total-mismatch." },
         severity: { type: "string", enum: ["high", "medium", "low"] },
         docId: { type: "string" },
         limit: { type: "number", description: "Default 60." },
+      },
+    },
+  },
+  {
+    name: "list_audit",
+    description:
+      "The append-only trail: who did what, when, to which document or item, and what they " +
+      "wrote as their reason. This is how to answer 'what happened to this document', 'why " +
+      "is this figure different from last week' and 'who decided that'. `query` searches the text " +
+      "of every entry, which is the ONLY way to find a document that has since been deleted — its " +
+      "filename lives in the entry's wording, not in a field. Search here by filename before " +
+      "telling anyone no record of something exists. Every entry is a record of something that " +
+      "already happened; nothing here can be changed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        periodId: { type: "string", description: "Defaults to the active period." },
+        docId: { type: "string", description: "Everything that happened to one document." },
+        query: {
+          type: "string",
+          description:
+            "Free text across every entry's wording — a filename, a vendor, an amount. Use this " +
+            "to trace a document that is no longer on the register.",
+        },
+        action: {
+          type: "string",
+          description:
+            "Substring match on the action, e.g. 'document.' or 'exception.resolved' or 'delete'.",
+        },
+        actor: { type: "string", description: "Exact match on who did it." },
+        limit: { type: "number", description: "Default 40, newest first." },
       },
     },
   },
@@ -255,6 +290,18 @@ export async function runNativeTool(
 
       case "get_form_draft":
         return json(await formDraft(input));
+
+      case "list_audit":
+        return json(
+          await listAudit({
+            periodId: await resolvePeriod(input),
+            docId: str(input.docId) || undefined,
+            query: str(input.query) || undefined,
+            action: str(input.action) || undefined,
+            actor: str(input.actor) || undefined,
+            limit: num(input.limit, 40),
+          }),
+        );
 
       default:
         /**
@@ -455,33 +502,86 @@ async function oneDocument(input: Record<string, unknown>) {
  * hundred documents, and a model asking for "AWS" wants every AWS document
  * rather than the best three.
  */
+/**
+ * Find documents by free text, matching on any word rather than the phrase.
+ *
+ * Matching the whole query as one substring is what a database does and it is
+ * the wrong behaviour for something a model queries in natural language. Asked
+ * "do I have an Anthropic subscription", a model sensibly searches for
+ * "Anthropic subscription" — and a phrase match returns nothing, because no
+ * field on the receipt contains those two words side by side. The vendor says
+ * "Anthropic, PBC" and the line item says "Max plan". The document is right
+ * there and the search reports an empty workspace, which is the worst answer
+ * available: not "I could not find it" but a confident, wrong "you do not have
+ * one".
+ *
+ * So the query is split into words and a document matches if any of them hits.
+ * Results are then ordered by how many distinct words matched, which puts the
+ * document that matched both "anthropic" and "subscription" above the one that
+ * only matched "subscription". Short words are dropped — "a", "do", "my" match
+ * everything and rank nothing.
+ *
+ * The fields searched are every field this tool's description promises,
+ * including the line items and the extraction notes. They were promised and
+ * not searched before, and a tool that quietly searches less than it claims
+ * makes a model give up on documents it would have found by asking differently.
+ */
 async function search(input: Record<string, unknown>) {
   const periodId = await resolvePeriod(input);
-  const query = (str(input.query) ?? "").toLowerCase();
+  const query = (str(input.query) ?? "").trim().toLowerCase();
   if (!query) return { error: "Send a query." };
 
   const limit = num(input.limit, 40);
   const views = await documentViews(periodId);
 
-  const hits = views.filter((view) => {
-    const categoryId = view.classification ? effectiveCategoryId(view.classification) : "";
-    return [
-      view.doc.filename,
-      view.extraction?.vendor,
-      view.extraction?.invoiceNumber,
-      categoryId,
-      categoryId ? categoryName(categoryId) : "",
-    ]
-      .filter(Boolean)
-      .some((field) => String(field).toLowerCase().includes(query));
-  });
+  const terms = Array.from(new Set(query.split(/[^a-z0-9]+/i).filter((word) => word.length > 2)));
+  // A query that is nothing but short words ("a/c", "VAT") still has to search
+  // for something, so it falls back to the phrase it was given.
+  const needles = terms.length > 0 ? terms : [query];
+
+  const scored = views
+    .map((view) => {
+      const categoryId = view.classification ? effectiveCategoryId(view.classification) : "";
+      const haystack = [
+        view.doc.filename,
+        view.doc.sourceDetail,
+        view.extraction?.vendor,
+        view.extraction?.invoiceNumber,
+        view.extraction?.paymentMethod,
+        view.extraction?.vendorAddress,
+        view.extraction?.vendorTaxId,
+        view.extraction?.notes,
+        view.extraction?.currency,
+        ...(view.extraction?.lineItems ?? []).map((item) => item.description),
+        categoryId,
+        categoryId ? categoryName(categoryId) : "",
+        view.classification?.rationale,
+      ]
+        .filter(Boolean)
+        .join(" \n ")
+        .toLowerCase();
+
+      const matched = needles.filter((needle) => haystack.includes(needle));
+      return { view, matched };
+    })
+    .filter((row) => row.matched.length > 0)
+    .sort((a, b) => b.matched.length - a.matched.length);
 
   return {
     periodId,
     query,
-    total: hits.length,
-    returned: Math.min(hits.length, limit),
-    documents: hits.slice(0, limit).map(compact),
+    searchedFor: needles,
+    total: scored.length,
+    returned: Math.min(scored.length, limit),
+    /**
+     * Which words actually hit, per document. A model that can see it matched
+     * only on "subscription" knows to say "this looks like it, but the vendor
+     * name did not match" rather than asserting it found what was asked for.
+     */
+    documents: scored.slice(0, limit).map((row) => ({
+      ...compact(row.view),
+      matchedTerms: row.matched,
+    })),
   };
 }
 
