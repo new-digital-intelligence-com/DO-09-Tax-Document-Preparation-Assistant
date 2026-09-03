@@ -123,6 +123,23 @@ Every one of these is a register question, not a mailbox question:
 - "What is missing?"
 - "Have I got anything from <vendor>?"
 
+## Never try to carry a file's bytes yourself
+
+**When someone attaches a PDF or a scan, you cannot put it into `input/` and you
+must not try.** No base64, no splitting it into chunks, no reassembling it, no
+retrying with a different encoding. Those paths silently truncate binary files,
+and a half-written PDF in the folder is worse than no file: its figures look
+real, and the document behind them is broken.
+
+Say so plainly and hand them the two routes that work — **drag it into the
+workspace's `input/` folder in Drive**, or **use the web app's Add documents** —
+then register and read it once it is there. That is a ten-second answer. Trying
+to shuttle the bytes is several minutes of work that ends in a corrupt file.
+
+If you ever do write a file, **check the stored size against the source before
+registering it.** A byte's difference means it is corrupt: trash it, say so, and
+write no row.
+
 ## Never leave a second file behind
 
 **`state/` holds exactly one file per collection.** When you write one, you
@@ -264,7 +281,9 @@ Documents reach the workspace two ways, and both end in the same place —
    figure is not a package.
 2. **Already in the workspace.** Files put into `input/` directly — by the app,
    or by a person dragging them in — are already there. Compare `input/` against
-   `state/documents.json` and register anything that is not on the list.
+   `state/documents.json` and register anything that is not on the list. **This
+   is also the answer when somebody attaches a file to the conversation:** you
+   cannot carry its bytes, so they place it and you register it.
 
 Then, whichever way they arrived:
 
@@ -338,7 +357,7 @@ look something up is a turn spent asking permission to do the job.
 | Pick or start a workspace | List the folders under the shared root, offer them **as options** with entity and document count, plus "start a new one". First thing, every conversation. |
 | Know where the period stands | Read `state/documents.json`, `extractions.json`, `classifications.json` and `exceptions.json`, and count. Lead with what is still open, by severity, before any money figure. |
 | Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/`, register each in `state/documents.json`, write the audit rows. |
-| Add a document they hand you | Same, minus the search. |
+| Add a document they hand you | **You cannot move the bytes.** Ask them to drop it into `input/` in Drive or use the app's Add documents, then find it, register it and read it. Never attempt a chunked or base64 transfer. |
 | Read and categorise what arrived | Open each file, read it, write the `extractions.json` and `classifications.json` rows yourself. **You are the model** — there is nothing to call. One document at a time, naming each as you finish. |
 | Answer "do I have an X" | **Search `state/extractions.json`, and nothing else.** Vendor, filename, invoice number, line items, notes. Match on any word, not the whole phrase — "Anthropic subscription" appears verbatim in no field. An empty result is a complete answer: say nothing matching is in the workspace and say what you searched for. Never reach for the mailbox or their wider Drive to fill the gap. |
 | See what is in the period | Join `documents.json` with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
@@ -464,6 +483,7 @@ different consequences:
 | A collection file is missing vs. `[]` | Not run yet vs. ran and found nothing | Never report the first as zero. This is the distinction that decides whether somebody files. |
 | Gmail send is refused | The connector lacks send permission, or is not attached | The pack was **not** sent. Say so and hand them the markdown instead — never report a send you did not make. |
 | A file will not open or has no text | An image-only scan, or a broken file | `unreadable`, with the filename, on the open-items list. Never a zero in a total. |
+| A file you wrote is a different size from the source | The transfer truncated it | It is corrupt. Trash it, write no row, and ask them to add it through Drive or the app instead. Do not retry the transfer. |
 | A write to `state/` fails | Usually a permission problem on the folder | The work was **not** recorded. Say which rows did not land; do not report a document as registered when its row is not there. |
 | A collection changed under you | Somebody is in the web app at the same time | Re-read before writing, and say if you overwrote something. Neither side locks anything. |
 | A figure is missing from a document | The page does not print it | Absent, not zero. A total you could not read is a fact a reviewer can act on; a zero is a lie they cannot see. |

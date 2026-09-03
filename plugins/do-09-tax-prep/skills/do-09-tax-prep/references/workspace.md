@@ -147,12 +147,39 @@ Say which of the two you are looking at whenever the answer is "nothing".
 
 ## Adding a document
 
-A document that arrives through you goes to the same place one uploaded in the
-app goes, and in the same shape. Anything less leaves a file in the folder that
-the app will treat as an unfamiliar stranger on its next sweep.
+### You do not move binary files. Get the bytes there another way.
 
-1. **Upload the bytes to `input/`**, keeping the original filename.
-2. **Compute its SHA-256** and append a row to `state/documents.json`:
+**A PDF or a scan attached to the conversation cannot be reliably written into
+`input/` by you, and you must not try.** Do not base64 it, do not split it into
+chunks and reassemble it, do not "retry the transfer", do not write it through a
+shell and hope. Every one of those paths silently truncates a binary file, and a
+half-written PDF in `input/` is worse than no file at all: the register's
+figures are only trustworthy because the document behind them is sitting there
+intact, and a truncated one still has a filename, a row and a total.
+
+When someone attaches a receipt and asks you to add it, say plainly that you
+cannot put the bytes there yourself, and give them the two routes that work:
+
+- **Drop it into the workspace's `input/` folder in Drive.** They already have
+  the folder open; it takes one drag. This is the reliable one.
+- **Use the web app's "Add documents".** It uploads the bytes server-side and
+  registers and reads the document in one step.
+
+Then do your half: find the new file in `input/`, register it, and read it.
+Offer that as the next step rather than leaving them holding a file.
+
+**If you ever do write a file, verify it before registering it.** Compare the
+stored size against the source. If they differ by a byte, the file is corrupt —
+trash it, say so, and do not write a row. Never register a document you have not
+confirmed arrived whole.
+
+### Registering a file that is already in `input/`
+
+This is the normal path, and the one that always works.
+
+1. **Find the file in `input/`** and note its Drive id, name and size.
+2. **Compute its SHA-256** from the file's own bytes, read back from Drive.
+3. Append a row to `state/documents.json`:
 
 ```json
 {
