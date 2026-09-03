@@ -186,3 +186,156 @@ Where a session has produced figures worth keeping, write the transcript to
 the same convention the app uses. One file per sitting, rewritten as it grows.
 
 Say that you saved it, and where. Never claim it if the write failed.
+
+## Writing what you read off a document
+
+You are the model here. There is no service to call to have a document read for
+you — you open the PDF through the connector, read it, and write the result into
+the register yourself. What follows are the exact shapes, because the web app
+reads these same files and a row in the wrong shape is a row it silently ignores.
+
+### `state/extractions.json` — one per document
+
+```json
+{
+  "docId": "doc_mtlp5ddekjiars",
+  "status": "extracted",
+  "docType": "invoice-received",
+  "direction": "expense",
+  "vendor": "Amazon Web Services, Inc.",
+  "vendorTaxId": "91-1646860",
+  "invoiceNumber": "INV-AWS-JAN25",
+  "issueDate": "2025-01-03",
+  "dueDate": "2025-01-18",
+  "currency": "USD",
+  "subtotal": 1698.34,
+  "tax": 143.85,
+  "total": 1842.19,
+  "lineItems": [{ "description": "EC2 compute, December", "amount": 1204.10 }],
+  "paymentMethod": "Visa",
+  "paymentLast4": "8543",
+  "confidence": 0.96,
+  "notes": "Only what a reviewer needs to know. Never suppressed.",
+  "modelId": "<the model you actually are>",
+  "extractedAt": "2026-09-03T18:00:00.000Z"
+}
+```
+
+`status` is one of `extracted`, `unreadable`, `out-of-scope`, `failed`, and the
+last three carry `statusDetail` saying why in a sentence a person can act on.
+
+**`unreadable` is a first-class outcome, not an error.** A scan with no legible
+figures is recorded with its filename and goes on the flag list. It is never
+dropped so the counts look tidy, and it never contributes a zero to a total.
+
+**`out-of-scope` is different again** — the file is not a financial document at
+all. Say what it appears to be, because that sentence is the whole of the answer
+the person who uploaded it gets.
+
+**`direction` decides the sign on the form.** On a bill you received it is
+`expense` and the vendor is *who was paid*, never the workspace's own entity —
+whose name is printed on the document just as prominently. Getting that
+backwards turns an expense into income.
+
+**Never guess a figure.** A total you could not read is absent, not zero, and
+absent is a fact a reviewer can act on.
+
+### `state/classifications.json` — one per document
+
+```json
+{
+  "docId": "doc_mtlp5ddekjiars",
+  "categoryId": "software-subscriptions",
+  "confidence": 0.93,
+  "rationale": "One sentence, from the document's own contents.",
+  "alternatives": [{ "categoryId": "professional-services", "confidence": 0.21 }],
+  "needsReview": false,
+  "reviewReason": "Set whenever needsReview is true.",
+  "classifiedAt": "2026-09-03T18:00:00.000Z",
+  "modelId": "<the model you actually are>"
+}
+```
+
+Category ids come from [categories.md](categories.md). `needsReview` is true
+below the workspace's `reviewConfidence` (in `settings.json`, 0.75 by default)
+and **always** true for a category marked `alwaysReview`, whatever your
+confidence — that flag exists precisely to stop a confident answer to a question
+that is not yours.
+
+`uncategorised` is a real answer. A document you genuinely cannot place goes
+there with the reason, and its amount reaches no form line. Guessing to make a
+draft look complete is the failure that category exists to prevent.
+
+**Never write `overriddenCategoryId`.** That field records a *human* correcting
+you, and the app keeps your answer beside theirs rather than replacing it.
+Writing it yourself forges a decision nobody made.
+
+### `state/exceptions.json` — everything flagged
+
+```json
+{
+  "id": "exc_mtlq3f8k2p",
+  "periodId": "period_2025_q1",
+  "kind": "total-mismatch",
+  "severity": "high",
+  "title": "Northgate Print does not add up",
+  "detail": "Specifics: the figures, the filename, the dates. Never a generic sentence.",
+  "suggestedAction": "What would close it, addressed to the reviewer.",
+  "docIds": ["doc_mtlp5ddekjiars"],
+  "amount": 927.00,
+  "currency": "USD",
+  "status": "open",
+  "raisedAt": "2026-09-03T18:00:00.000Z",
+  "raisedBy": "<who ran this>"
+}
+```
+
+`kind` must be one of: `duplicate-document`, `total-mismatch`,
+`unreadable-document`, `missing-period`, `currency-mismatch`,
+`low-confidence-category`, `category-needs-judgement`, `missing-vendor-tax-id`,
+`possible-personal-expense`, `capitalisation-threshold`,
+`contractor-1099-threshold`. A kind outside that list is one the app cannot
+render.
+
+`status` is `open`, `resolved` or `accepted`. **You may only ever write
+`open`.** Resolving and accepting are human decisions that require a note, and
+the two mean different things about the period — a resolved item says the
+problem was fixed, an accepted one says a person looked and it is fine. Closing
+one yourself puts a decision in the register that nobody made.
+
+### `state/audit.json` — append, never rewrite
+
+```json
+{
+  "id": "aud_mtlq3f8k2p",
+  "at": "2026-09-03T18:00:00.000Z",
+  "actor": "<who asked>",
+  "action": "document.ingest",
+  "subject": "doc_mtlp5ddekjiars",
+  "result": "ok",
+  "detail": "What happened, in specifics.",
+  "periodId": "period_2025_q1",
+  "docId": "doc_mtlp5ddekjiars"
+}
+```
+
+**Newest first**, and every action you take gets one — including the ones you
+refused. The trail is the only place a deleted document survives, and it is what
+somebody reads when a figure is questioned six weeks later.
+
+### Ids
+
+`<prefix>_<something unique>`: `doc_`, `exc_`, `aud_`, `frm_`, `pkg_`. Anything
+unique is fine; the app generates a timestamp in base 36 plus random characters.
+Never reuse an id and never renumber an existing one.
+
+## Two processes, one folder
+
+The web app writes these same files with its own credentials, and neither side
+locks anything. If somebody is using the app while you are working, you can both
+read a collection, both write it, and the second write discards the first.
+
+The window is a second or so and there is no fix available in a
+folder-of-JSON-files design. What you can do is not widen it: read a collection
+immediately before writing it rather than holding a copy across several steps,
+and write once at the end of a batch rather than after every document.

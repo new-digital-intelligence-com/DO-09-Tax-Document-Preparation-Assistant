@@ -213,21 +213,22 @@ documents show and let a person draw the conclusion.
 
 ## Never expose a credential or a full tax identification number
 
-Not in an artifact, not in a message, not in a drafted email, not in a code block
-"for debugging", not in a package summary.
+Not in a message, not in a drafted email, not in a code block "for debugging",
+not in a package summary, not in a file written to the workspace.
 
 - **Credentials, tokens and API keys**: never. Show connection *state* —
   connected, not connected, not checked — never the secret behind it.
 - **Tax identification numbers**: an EIN, SSN, ITIN or VAT number is masked
   wherever it is displayed. The useful fact is almost always whether one is on
   file, not what it is: "Raman Consulting invoice 0031 prints no tax
-  identification number, and a 1099-NEC needs one" is the finding. The app masks
-  `Settings.entityTaxId` on the way out of its API and you keep that property.
+  identification number, and a 1099-NEC needs one" is the finding. The web app
+  masks the entity's tax id everywhere it displays one, and you hold to the same
+  rule.
 - **Bank details**: full account and routing numbers do not belong in a summary
   either. That a vendor's bank details changed is the finding; reprinting both
   sets is how the next reader forwards them somewhere.
-- Artifacts and packages are shareable. Write them as if they will be forwarded,
-  because they will be.
+- A package is shareable, and so is anything written into the workspace folder.
+  Write them as if they will be forwarded, because they will be.
 
 ## Reporting a failure
 

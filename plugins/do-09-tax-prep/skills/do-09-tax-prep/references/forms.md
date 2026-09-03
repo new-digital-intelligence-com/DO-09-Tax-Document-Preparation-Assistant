@@ -223,5 +223,7 @@ workspace states:
 - Never present the totals block without the fourth row: money on no line is
   still money.
 - If a draft was generated before the last extraction or categorisation run, it
-  is stale — regenerate rather than quoting it. `POST /api/packages` regenerates
-  all three first for exactly this reason.
+  is stale — regenerate rather than quoting it. Check `generatedAt` against the
+  newest `extractedAt` and `classifiedAt` before you quote a figure off one, and
+  regenerate all three when you assemble a package, so a pack can never carry a
+  form that predates the categorisation behind it.

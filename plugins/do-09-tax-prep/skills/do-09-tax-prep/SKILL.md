@@ -9,11 +9,15 @@ Collect a filing period's invoices, receipts and financial documents, read each
 one, categorise it against the firm's chart, flag every inconsistency for a
 human, and assemble the package a tax manager reviews.
 
-**You do everything the web app does.** Same workspace, same documents, same
-register, same rules — a person who starts a quarter in the app and finishes it
-here should not be able to tell where one stopped and the other began. What
-differs is only how you reach Google: the app has its own OAuth client, and you
-use **the user's own connectors**.
+**You do everything the web app does, and you do it yourself.** The register is
+JSON files in a Google Drive folder; you have the connector; you open them, read
+the documents, and write the results back. There is no service to call. You are
+the model that reads a page and chooses a category — nothing else is going to do
+it for you.
+
+Same workspace, same files, same rules as the app, so a person who starts a
+quarter there and finishes it here cannot tell where one stopped and the other
+began.
 
 **The one thing this skill will not do is file.** Every form it produces is a
 draft, and a person reviews the pack and files it. You prepare what they review.
@@ -191,104 +195,65 @@ that opens with nine open items invites someone to work them.
 Hand it to a **named** person, and never to the address that prepared it. A
 second person reviewing before anything is filed is the whole point.
 
-## 5. Everything the app does, you do
+## 5. Answering a question about the workspace
 
-The app and this skill share one register in one Drive folder, so there is no
-"the app's data" and "your data" — there is the workspace, and two ways in.
+Everything below is done by reading and writing files in the Drive folder with
+the connector you already have. There is no service to call and no API to reach
+for — the register is JSON in a folder, you can open it, and
+[references/workspace.md](references/workspace.md) has every shape you need to
+read or write.
 
-**Prefer the app's HTTP API** for anything it covers. It writes the record and
-the audit row in the same step and enforces the rules in code rather than in a
-prompt, which is strictly safer than making the same edits by hand. See
-[references/app-api.md](references/app-api.md).
+**Look before you answer.** These are questions you resolve by opening a file,
+not by asking the user to tell you what is in their own workspace. Offering to
+look something up is a turn spent asking permission to do the job.
 
-Two base URLs, and which one is reachable depends on where you are running:
-
-```
-https://do-09-tax-document-preparation-assi.vercel.app    the deployment
-http://localhost:3000                                      a dev server on this machine
-```
-
-**In the Claude app or on claude.ai, only the deployment exists.** You are not
-on the user's computer, so `localhost` is not their machine — it is nothing at
-all, and a call to it fails in a way that looks like the app being down. Never
-try it there.
-
-**In Claude Code, try `localhost:3000` first**, then the deployment. A dev
-server running beside the repo is the code as it is now, including changes that
-have not been deployed; the deployment is the code as it was at the last push.
-Reading one and reporting the other is how a confusing bug report gets written.
-
-Say which you used the first time it matters in a conversation. If neither
-answers, work through the Drive connector against the same folder — see
-[references/workspace.md](references/workspace.md) — and say that is what you
-did.
-
-If it does not answer, do the same work through the Drive connector against the
-same files, following [references/workspace.md](references/workspace.md). The
-outcome must be indistinguishable: same folder, same JSON shapes, same audit
-rows. A person who opens the app afterwards should find your work already there.
-
-Say which route an answer came from when it matters — "read from the register"
-and "read the file myself just now" are different claims.
-
-| The user wants to | Do this |
+| The user wants to | What you do |
 |---|---|
-| Pick or start a workspace | List the folders under the shared root, offer them **as options** with entity and document count, plus "start a new one". This happens first, every conversation. See [references/workspace.md](references/workspace.md). |
-| Know where the period stands | `GET /api/status`, or read `state/`. Lead with open items by severity, not with the money. Money figures are `null` until the step that produces them has run — `null` is not zero. |
-| Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/` and register them. `POST /api/import/drive` does it when the app is up. |
-| Add a document they hand you | Upload the bytes to `input/`, register it, audit it. `POST /api/documents` when the app is up. |
-| Read and categorise what has arrived | `POST /api/documents/{id}/process` one document at a time, naming each as it finishes. Without the app, read and categorise them yourself and write the rows. |
-| See what is in the period | `GET /api/documents`, or `state/documents.json` joined with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
-| Answer a question about the corpus | Search before answering. "Do I have an X subscription" is a question you look up, not one you offer to look up. An empty result is an answer; say what you searched for. |
-| Delete a document | Ask for a reason first — it is required and it goes on the trail. Then remove **all** of it: the row, the reading, the categorisation, the findings only about it, the file in `input/`, and `output/<sha256>.json`. `DELETE /api/documents/{id}` with `{reason}` does all six. Missing the last one means re-uploading the same file silently restores the old figures. |
-| Change the period's name, entity or dates | `PUT /api/settings/period`, or edit `state/settings.json`. **Never change the period's id** — every document points at it, so a new id detaches the corpus. |
-| Know why something was flagged | `GET /api/exceptions`, or `state/exceptions.json`. Read the detail verbatim — it carries the figures — then the suggested action. |
-| Close a flag | You cannot. Say which screen does it, whether it is `resolved` or `accepted` (they mean different things), and draft the note the person will have to type. |
-| Change a document's category | You cannot. `POST /api/classify/override` is a human action needing a note; the model's answer is kept beside theirs, not overwritten. |
-| See the totals for a category | `GET /api/categories`, which carries `recorded` and `deductible` per category. They differ where `deductiblePct` does, and the difference is a statutory limit, not a discrepancy. |
-| Draft the forms | `POST /api/forms`. Every line that was adjusted says why. Quote nothing off one without the word draft. |
-| Assemble the package | `POST /api/packages`, then `POST /api/packages/handoff` to a named reviewer. It records the handoff; it files nothing. |
-| Get the package as a PDF | `GET /api/packages/pdf` (add `?id=` for an older pack). Paginated, marked DRAFT on every page. Without the app, hand them the markdown and say it is not the PDF. |
-| Email the package | `POST /api/packages/send` with `packageId` and `to` when the app is up; otherwise send it yourself through the Gmail connector from the user's own address, then record the handoff. **Confirm the recipient as a form first, and never send to check that it works** — there is no draft mode and the tax manager gets whatever you send. |
-| Keep a record of this conversation | Write the transcript to `conversations/` in the workspace as Markdown when the session produced figures worth keeping. Say that you saved it and where; never claim it if the write failed. |
-| File the return | Not available, to you or to the app. Say the package is ready for review and name the reviewer. |
-| Read the history | `GET /api/audit`, or `state/audit.json`. Append-only, refusals in it too. It is also the only place a **deleted** document survives — search it by filename before telling anybody no record exists. |
-| Chase a missing invoice | Draft the request to the vendor with the dates and amounts exactly as recorded. Never invent an invoice number — a request naming an invoice that does not exist gets a confused reply and no invoice. |
+| Pick or start a workspace | List the folders under the shared root, offer them **as options** with entity and document count, plus "start a new one". First thing, every conversation. |
+| Know where the period stands | Read `state/documents.json`, `extractions.json`, `classifications.json` and `exceptions.json`, and count. Lead with what is still open, by severity, before any money figure. |
+| Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/`, register each in `state/documents.json`, write the audit rows. |
+| Add a document they hand you | Same, minus the search. |
+| Read and categorise what arrived | Open each file, read it, write the `extractions.json` and `classifications.json` rows yourself. **You are the model** — there is nothing to call. One document at a time, naming each as you finish. |
+| Answer "do I have an X" | Search the extractions: vendor, filename, invoice number, line items, notes. Match on any word, not the whole phrase — "Anthropic subscription" will not appear verbatim in any field. An empty result is an answer; say what you searched for. |
+| See what is in the period | Join `documents.json` with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
+| Know why something is flagged | Read `exceptions.json`. Read the `detail` verbatim: it carries the figures. Then the `suggestedAction`. |
+| Raise a flag | Append to `exceptions.json` with `status: "open"`, a `kind` from the allowed list, the actual figures in `detail`, and an action a person can take. |
+| Close a flag | **You cannot.** `resolved` and `accepted` are human decisions needing a note, and they mean different things about the period. Say which screen does it and draft the note they will have to type. |
+| Change a document's category | **You cannot.** A human's correction is recorded separately from your answer, and writing it yourself forges a decision nobody made. |
+| See totals by category | Sum the extractions by their classification, applying the `deductiblePct` from [references/categories.md](references/categories.md). Documents in another currency are counted and listed but never added into a total in a different one. |
+| Draft the forms | Arithmetic over the categorised documents — [references/forms.md](references/forms.md) says what feeds which line. Every line that was adjusted says why. Quote nothing off one without the word draft. |
+| Assemble the package | Open items first, then the totals, then the document index. Write it to `state/packages.json` and give them the markdown. |
+| Email the package | Confirm the recipient **as a form**, then send it with the Gmail connector from their own address, then record the handoff. Never send to check that it works. |
+| Delete a document | Ask for a reason first, as options. Then all six steps in the workspace reference — the row, the reading, the categorisation, the flags only about it, the file in `input/`, and `output/<sha256>.json`. |
+| Change the period's name, entity or dates | Edit `state/settings.json`. **Never change the period's id** — every document points at it. |
+| Trace something that is gone | `state/audit.json`, searched by filename. It is the only place a deleted document survives, so check it before telling anybody no record exists. |
+| Keep a record of the conversation | Write the transcript to `conversations/` as Markdown when the session produced figures worth keeping. Say where you put it; never claim it if the write failed. |
+| File the return | **Not available.** Say the package is ready for review and name the reviewer. |
 
-Three rows in that table end at a human by design: **filing**, **closing a
-finding** and **overriding a category**. That is not a permission you can be
-granted; the tools do not exist.
+Four rows there end at a human by design: **filing**, **closing a finding**,
+**overriding a category** and **deciding deductibility**. Those are not
+permissions you can be granted — they are the point of the product.
 
-For a request spanning several — "get Q1 ready for the accountant" — work them in
-sequence and report each, rather than answering across all of them at once.
+For a request spanning several — "get the quarter ready for my accountant" —
+work them in sequence and report each, rather than answering across all of them
+at once.
 
-## 6. Work through the Tax Prep Console artifact
+### The web app is the other way in, not a service you call
 
-In the **Claude app** or on claude.ai there is **one** artifact for this
-toolkit — a single **Tax Prep Console** page — and this skill is its backend. Do
-not publish an artifact per question: find the existing one, refresh the part
-the user asked about, and republish it to the same URL.
+There is a companion Next.js console. It reads and writes the **same** Drive
+folder with its own server-side credentials. That means two things and no more:
 
-**Build or update it for every substantive answer**, not only long ones. A
-missing connector, a period nobody has read and a quarter with nine open items
-are all states the page draws, so a thin result is a reason to render it rather
-than a reason to fall back to prose. Reply in text only for a single fact, or in
-a terminal, where there is no artifact viewer.
+- **What you write, it shows.** A document you register appears in its list; a
+  flag you raise appears on its Exceptions screen. Match the shapes in
+  the workspace reference exactly or it will skip the row.
+- **What it writes, you read.** A category somebody corrected in the app is in
+  `classifications.json` before you look.
 
-Start from [references/tax-console.html](references/tax-console.html): everything
-renders from the one `DATA` object at the bottom, and the rules and the `DATA`
-contract are in `references/artifact.md`. The page's own header comment states
-the distinction it exists to keep: **a key you did not fetch is absent, and a
-key you fetched and found empty is `[]`.** Handing a section `[]` because a read
-failed draws a clean quarter.
+You do not call it, and you do not need it running. If somebody asks about "the
+app", it is where a person clicks; the folder is where the data is.
 
-Lead with the source strip and the open items. A page whose figures arrive
-before its unresolved findings invites somebody to act on the figures.
 
-**No control on that page may file, submit, sign or close a finding.** It can
-show what is open and copy a note for a person to paste. That is the line.
-
-## 7. Ask with the question form, not prose
+## 6. Ask with the question form, not prose
 
 **Every question you put to the user goes through the tappable question tool,
 as options.** Not just the ones that obviously have choices in them — every one.
@@ -359,21 +324,21 @@ put in a form, and phrasing it as a question does not create one.
 attached. What you may offer is which category records it, who decides, and what
 note to attach while it waits.
 
-## 8. When something fails
+## 7. When something fails
 
-Get the reason out of the payload before reporting anything. The failure modes
-here have different fixes and different consequences:
+Say what failed and what it cost the answer. These have different fixes and
+different consequences:
 
 | What you see | What it is | What it means for the answer |
 |---|---|---|
 | The shared root cannot be listed | Connector missing, or it has no access to that folder | You do not know whose workspaces exist. Stop; do not offer to create one blind. |
 | A workspace folder has no `state/` | Nobody has done any work in it yet | An empty workspace, not an empty quarter. Say which. |
 | A collection file is missing vs. `[]` | Not run yet vs. ran and found nothing | Never report the first as zero. This is the distinction that decides whether somebody files. |
-| Gmail send is refused | The connector lacks send permission, or it is not attached | The pack was **not** sent. Say so and offer the PDF instead — never report a send you did not make. |
+| Gmail send is refused | The connector lacks send permission, or is not attached | The pack was **not** sent. Say so and hand them the markdown instead — never report a send you did not make. |
 | A file will not open or has no text | An image-only scan, or a broken file | `unreadable`, with the filename, on the open-items list. Never a zero in a total. |
-| `400` from an app route changing a record | The required note was blank | Write the note. Every such route rejects a blank one. |
-| `503` from an app model route | `ANTHROPIC_API_KEY` is not set | Nothing was read. The corpus is not half-read, it is unread. |
-| The app is unreachable | It is not running | Say so, and say the register was not consulted. |
+| A write to `state/` fails | Usually a permission problem on the folder | The work was **not** recorded. Say which rows did not land; do not report a document as registered when its row is not there. |
+| A collection changed under you | Somebody is in the web app at the same time | Re-read before writing, and say if you overwrote something. Neither side locks anything. |
+| A figure is missing from a document | The page does not print it | Absent, not zero. A total you could not read is a fact a reviewer can act on; a zero is a lie they cannot see. |
 
 Never convert a failure into a shrug. "I could not read the March folder, so the
 March expenses are unknown" is useful. Silence reads as a clean quarter, and a
