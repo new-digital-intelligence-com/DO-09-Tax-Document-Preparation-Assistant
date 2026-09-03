@@ -27,7 +27,22 @@ export function AskPanel() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Identity for this sitting, minted here rather than on the server.
+   *
+   * Everything asked in one session belongs in one transcript, and the server
+   * has no way to tell a follow-up question from a fresh conversation — every
+   * request looks the same to it. Holding the id on this side is what keeps a
+   * morning's questions in one file instead of scattering them across a
+   * folder as one file per question.
+   */
+  const [session] = useState(() => ({
+    id: `conv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+    startedAt: new Date().toISOString(),
+  }));
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -49,11 +64,14 @@ export function AskPanel() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           messages: next.map(({ role, content }) => ({ role, content })),
+          conversationId: session.id,
+          startedAt: session.startedAt,
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body?.error ?? `The assistant responded ${response.status}.`);
       setTurns([...next, { role: "assistant", content: body.reply, trace: body.trace }]);
+      setSaved(body.saved?.filename ?? null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The assistant could not be reached.");
     } finally {
@@ -108,6 +126,22 @@ export function AskPanel() {
           ))}
 
           {busy && <p className="text-[13px] text-ink-3">Reading the register…</p>}
+
+          {/* Said only when it is true. A line that always claimed the
+              transcript was kept would be wrong exactly when Drive was
+              unreachable, which is the one time it matters. */}
+          {!busy && turns.length > 0 && (
+            <p className="text-[11.5px] text-ink-3">
+              {saved ? (
+                <>
+                  Saved to your Drive folder as <Mono>conversations/{saved}</Mono>
+                </>
+              ) : (
+                "This conversation could not be saved to Drive. The answers above still stand; only the record of them is missing."
+              )}
+            </p>
+          )}
+
           <div ref={endRef} />
         </div>
 

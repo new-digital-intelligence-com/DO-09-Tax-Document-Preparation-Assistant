@@ -37,12 +37,11 @@ is meant to be replaced wholesale. You do not need to read it to replace it.
 | `overview` | `GET /api/status` — counts, money, period, sources |
 | `documents` | `GET /api/documents` — one `DocumentView` per row |
 | `categories` | `GET /api/categories` — the chart with `recorded`, `deductible`, `docCount` |
-| `reconciliation` | `GET /api/reconcile` — `matched`, `documentOnly`, `ledgerOnly` |
 | `exceptions` | `GET /api/exceptions` |
 | `forms` | `GET /api/forms` |
 | `package` | `GET /api/packages`, then `GET /api/packages?id=<id>` for the markdown |
 
-All seven are GETs. Nothing you do to fill this page changes a record.
+All six are GETs. Nothing you do to fill this page changes a record.
 
 ## The DATA contract
 
@@ -76,16 +75,9 @@ DATA = {
     categories: [{
       name, kind, formLine, recorded, deductible, currency, docCount, note,
     }],
-    reconciliation: {
-      matched:      [{ filename, vendor, entryDescription, counterparty,
-                       docAmount, entryAmount, currency, delta, reasons }],
-      documentOnly: [{ filename, vendor, issueDate, amount, currency, reasons }],
-      ledgerOnly:   [{ date, description, counterparty, account, amount,
-                       currency, ref, reasons }],
-    },
     exceptions: [{
       kind, severity, title, detail, suggestedAction, status,
-      documents, ledgerEntries, amount, currency,
+      documents, amount, currency,
       resolvedBy, resolvedAt, resolutionNote,
     }],
     forms: [{
@@ -139,10 +131,6 @@ up to; deductible is what reaches the form line. Where they differ, `note` says
 why in words (meals at 50%, business-use fraction). A draft that puts the receipt
 total on the line is wrong while every document behind it is right, which is the
 hardest kind of error to catch in review, so both figures are always shown.
-
-**`reconciliation.matched[].delta`** — the difference between the document and
-the ledger entry, to the cent, signed. Never round it, never omit it, never
-"resolve" it by picking one of the two figures. The difference is the finding.
 
 **`exceptions[].suggestedAction`** — what would close it, addressed to the
 reviewer. A flag with no suggested action is a to-do the reviewer has to
@@ -211,10 +199,10 @@ The strip at the top is not decoration. Not knowing *which* source was read is
 the commonest confusion, and here it is load-bearing: a page that cannot say
 whether Drive was swept is a page whose empty document table means nothing.
 
-Name what each source contributes — Google Drive for the finance folder, Gmail
-for invoices that only ever arrived as an attachment, console uploads, the
-generated corpus, the read-only accounting ledger, the model that reads the
-pages.
+Name what each source contributes — the shared Drive workspace that holds the
+register, the user's own Drive for documents they already had, console uploads,
+and the model that reads the pages. Gmail belongs on that list only as an
+outbound path for the finished package: no mailbox is read.
 
 **Never put a credential in the page.** Artifacts are shareable HTML; the console
 shows connection *state*, never a token, and never an unmasked EIN.
@@ -232,7 +220,7 @@ that is not the real one.
 - **Did not query it this turn → `connected: null`**
 
 `detail` carries the sub-state, because a source can be present while the sweep
-behind it has not run: `detail: "Google Drive is not wired into this build, so no
+behind it has not run: `detail: "No documents have been imported from this Drive, so no
 sweep has run against it and the figure is unknown rather than zero."` That is a
 different problem from a broken connector, and it is fixed differently.
 
@@ -244,14 +232,14 @@ runs locally.
 
 It does **not** call anything. Its action is "Copy for Claude" — text comes back
 to you and you do the work. Never label a control File, Submit, Approve, Resolve
-or Override, and never let the page imply that something reached the app, the
-ledger or a tax authority.
+or Override, and never let the page imply that something reached the app or a
+tax authority.
 
-The page does make one judgement of its own, and it is a refusal rather than a
-correction: if `reconciliation.matched` and `.documentOnly` both come back empty
-while documents are loaded, it says the reconciliation has not seen the documents
-instead of rendering a clean result. It does not repair the data — it names what
-is wrong with it, which is what this product does everywhere else too.
+The page makes judgements of its own, and they are refusals rather than
+corrections. A section whose key was never fetched renders as *not loaded*, not
+as empty; documents loaded with no extractions says nothing has been read rather
+than showing a column of zeros. It does not repair the data — it names what is
+wrong with it, which is what this product does everywhere else too.
 
 ## Turning on live actions
 
@@ -270,7 +258,7 @@ LIVE = {
     requestDocument: {
       server: "gmail",
       tool: "<observed tool name>",
-      args: ({ vendor, amount, period, ledgerRef }) => ({ /* the shape you observed */ }),
+      args: ({ vendor, amount, period, invoiceNumber }) => ({ /* the shape you observed */ }),
     },
   },
 }
@@ -279,7 +267,7 @@ LIVE = {
 **And one rule that overrides both: a live control may never file, submit, sign,
 resolve an exception, accept one, override a category or hand off a package.**
 The page may *raise a request* — draft a mail to a vendor asking for the missing
-invoice behind a `missing-support` flag — and it may *copy a decision* for a
+invoice behind a gap in a vendor's billing — and it may *copy a decision* for a
 person to carry out. Anything that changes the record goes through a named human
 in the console, with a dialog stating the consequence and a typed note in the
 audit trail. A button on a shareable HTML page is not a named human, and it
@@ -309,9 +297,8 @@ Claude-in-the-page has **no memory and no skill loaded**, so everything that
 governs it goes in `rules` — the same contract the chat-side skill follows and
 the same file `src/lib/skills.ts` reads into the app agent's system prompt, so
 all three surfaces behave identically. That includes the three invariants: the
-in-page assistant reads, reconciles and drafts, and it does not file, does not
-silently adjust a figure to make a total agree, and does not decide
-deductibility. Uncertain categorisations go to the tax manager with the document
+in-page assistant reads and drafts, and it does not file, does not silently
+adjust a figure to make a total agree, and does not decide deductibility. Uncertain categorisations go to the tax manager with the document
 attached, in the page exactly as in the conversation.
 
 The viewer pays for these calls and the first one asks consent, so it only fires

@@ -162,10 +162,28 @@ function colour(value) {
 
 export class Pdf {
   /** US Letter by default; the till-roll receipts pass their own narrow size. */
-  constructor({ width = 612, height = 792 } = {}) {
+  constructor({
+    width = 612,
+    height = 792,
+    producer = "DO-09 fixture generator, src/lib/pdf-lite.mjs",
+    creator = "DO-09 Tax Document Preparation Assistant",
+    creationDate = "D:20250401120000Z",
+  } = {}) {
     this.defaultSize = { width, height };
+    this.producer = producer;
+    this.creator = creator;
+    this.creationDate = creationDate;
     this.pages = [];
     this.current = null;
+  }
+
+  /** `D:YYYYMMDDHHmmSSZ`, the only date syntax a PDF reader accepts. */
+  static stamp(date = new Date()) {
+    const p = (n) => String(n).padStart(2, "0");
+    return (
+      `D:${date.getUTCFullYear()}${p(date.getUTCMonth() + 1)}${p(date.getUTCDate())}` +
+      `${p(date.getUTCHours())}${p(date.getUTCMinutes())}${p(date.getUTCSeconds())}Z`
+    );
   }
 
   /** Start a new page. Everything drawn afterwards lands on it. */
@@ -339,13 +357,22 @@ export class Pdf {
       objects[index] =
         `<< /Type /Font /Subtype /Type1 /BaseFont /${name} /Encoding /WinAnsiEncoding >>`;
     }
-    // A fixed creation date, not `now`. Two runs of the generator must produce
-    // byte-identical files, or the duplicate-document fixture would stop
-    // sharing a hash with the invoice it duplicates.
+    /*
+     * The creation date defaults to a fixed instant rather than `now`.
+     *
+     * That is not laziness: two runs of the fixture generator have to produce
+     * byte-identical files, or the duplicate-document fixture stops sharing a
+     * hash with the invoice it duplicates and the deduplication test silently
+     * stops testing anything.
+     *
+     * A caller producing a real document — a review package somebody is about
+     * to send — passes its own date and producer instead, because a pack
+     * stamped April 2025 forever is a small lie printed on a tax document.
+     */
     objects[6] =
-      "<< /Producer (DO-09 fixture generator, scripts/lib/pdf-lite.mjs) " +
-      "/Creator (DO-09 Tax Document Preparation Assistant) " +
-      "/CreationDate (D:20250401120000Z) >>";
+      `<< /Producer (${pdfText(this.producer)}) ` +
+      `/Creator (${pdfText(this.creator)}) ` +
+      `/CreationDate (${pdfText(this.creationDate)}) >>`;
 
     this.pages.forEach((page, i) => {
       const pageNum = pageNums[i];

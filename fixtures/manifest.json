@@ -18,8 +18,8 @@
       "sourceDetail": "Finance/2025/Q1/Invoices out",
       "sourceRef": "1aQ7nR-northwind-inv-2025-001",
       "mimeType": "application/pdf",
-      "bytes": 4588,
-      "sha256": "ca25a69190050e58337f652584afe092288340849103e17234ac931cfb1672f7",
+      "bytes": 4584,
+      "sha256": "7ba77e221c06197d5cf68479469852677df2bbd89acc9a24e7d7695f993d2f26",
       "imageOnly": false,
       "truth": {
         "vendor": "Acme Robotics Inc.",
@@ -40,8 +40,8 @@
       "sourceDetail": "Finance/2025/Q1/Invoices out",
       "sourceRef": "1aQ7nR-northwind-inv-2025-002",
       "mimeType": "application/pdf",
-      "bytes": 4017,
-      "sha256": "8c6d3574f2160590af9dd4acc79eaf59a86e378f96a42b60a047ba585f06c2d5",
+      "bytes": 4013,
+      "sha256": "f1f71a37f8ef41ee4c6c081c629ba09074f7de8efc876f1b4cc09c843f42c70f",
       "imageOnly": false,
       "truth": {
         "vendor": "Bluepeak Health Systems",
@@ -59,11 +59,11 @@
       "id": "doc_f03",
       "file": "INV-2025-003 Cormorant Ventures.pdf",
       "source": "gmail",
-      "sourceDetail": "sent: accounts@northwind.studio \u2192 ap@cormorant.vc",
+      "sourceDetail": "sent: accounts@northwind.studio → ap@cormorant.vc",
       "sourceRef": "msg-18f2c9a1b0e3",
       "mimeType": "application/pdf",
-      "bytes": 4469,
-      "sha256": "3c1ca7fe19800866af49680705b01e1bfa77fab604e6311f9a753cecb2e06d10",
+      "bytes": 4465,
+      "sha256": "7094867af074ca3c75ce60bcc98fb4d7a0b09189e9e8e90eef7410a83533568d",
       "imageOnly": false,
       "truth": {
         "vendor": "Cormorant Ventures LP",
@@ -84,8 +84,8 @@
       "sourceDetail": "Finance/2025/Q1/Invoices out",
       "sourceRef": "1aQ7nR-northwind-inv-2025-004",
       "mimeType": "application/pdf",
-      "bytes": 4008,
-      "sha256": "84541c3f72710f8c06d79036e3e846b3a2d8f696d2678cecc61b1b52c18b391c",
+      "bytes": 4004,
+      "sha256": "3b3060f00605b7ccc2ae96a84deffdc408383a3043ca7372114cf06769d712eb",
       "imageOnly": false,
       "truth": {
         "vendor": "Acme Robotics Inc.",
@@ -106,8 +106,8 @@
       "sourceDetail": "Finance/2025/Q1/Invoices out",
       "sourceRef": "1aQ7nR-northwind-inv-2025-005",
       "mimeType": "application/pdf",
-      "bytes": 4016,
-      "sha256": "d9a0fd29f0e964ab74174cddab18bd4dcb5e9b5148f5930b105b9abfba240d10",
+      "bytes": 4012,
+      "sha256": "60a05ce39e8a12421422bd708cbc60c456473fcd9118926b81a1be8e2c82a16e",
       "imageOnly": false,
       "truth": {
         "vendor": "Bluepeak Health Systems",
@@ -125,11 +125,11 @@
       "id": "doc_f06",
       "file": "INV-2025-006 Delta Freight Co.pdf",
       "source": "gmail",
-      "sourceDetail": "sent: accounts@northwind.studio \u2192 ap@deltafreight.co",
+      "sourceDetail": "sent: accounts@northwind.studio → ap@deltafreight.co",
       "sourceRef": "msg-18f5d1c4a992",
       "mimeType": "application/pdf",
-      "bytes": 4013,
-      "sha256": "85341f34fb8d8b0792ddba4caf4a986468a1aa539d944c56532dc32b6c6f3ddd",
+      "bytes": 4009,
+      "sha256": "d2c769006c53d64c779ac0894a39bcfa20defcdcf4c84e435ec90cfe3eaf6ae3",
       "imageOnly": false,
       "truth": {
         "vendor": "Delta Freight Co.",
@@ -150,8 +150,8 @@
       "sourceDetail": "Finance/2025/Q1/Invoices out",
       "sourceRef": "1aQ7nR-northwind-inv-2025-007",
       "mimeType": "application/pdf",
-      "bytes": 4011,
-      "sha256": "c461f3a66632567250d8ec5a2f06897edfd2fa621443da9f693ddcc985886bb1",
+      "bytes": 4007,
+      "sha256": "ddeb54876a88eeee13749a5ff8edd062e1a3c3497754257049fd061f88676a40",
       "imageOnly": false,
       "truth": {
         "vendor": "Bluepeak Health Systems",
@@ -172,8 +172,8 @@
       "sourceDetail": "Finance/2025/Q1/Credit notes",
       "sourceRef": "1aQ7nR-northwind-cn-2025-001",
       "mimeType": "application/pdf",
-      "bytes": 4181,
-      "sha256": "02728a264065d9a50331d081f1f0e812c99699be5085e72a35ad1617fd380b3a",
+      "bytes": 4177,
+      "sha256": "61797d12ef7e27a7cd65f1046f1fe41272d8667a9a8af551b07e423ac19b65aa",
       "imageOnly": false,
       "truth": {
         "vendor": "Delta Freight Co.",
@@ -194,8 +194,8 @@
       "sourceDetail": "from: receipts@stripe.com",
       "sourceRef": "msg-18f7a3b21c40",
       "mimeType": "application/pdf",
-      "bytes": 5493,
-      "sha256": "c86fa9aeac2ac1c48870192a5aeafc587338cc0ee597281a568d5885ec42e340",
+      "bytes": 5489,
+      "sha256": "22e42e2c5181981ba4486e6499eec9e2720849106800ae36c5d3abbcfb8d9bf5",
       "imageOnly": false,
       "truth": {
         "vendor": "Stripe",
@@ -217,8 +217,8 @@
       "sourceDetail": "from: billing@amazonaws.com",
       "sourceRef": "msg-18e9c4d5f001",
       "mimeType": "application/pdf",
-      "bytes": 5354,
-      "sha256": "f900b09d15f7087a2075a7fd316414cd7d78d7b65876cd510a180cb5de7b6136",
+      "bytes": 5350,
+      "sha256": "0d083eed75aa29615ba1e3fec45d56dd23fa4765e87ec0412cd9b0e10c994d94",
       "imageOnly": false,
       "truth": {
         "vendor": "Amazon Web Services, Inc.",
@@ -243,8 +243,8 @@
       "sourceDetail": "from: billing@amazonaws.com",
       "sourceRef": "msg-18ec71a9b220",
       "mimeType": "application/pdf",
-      "bytes": 5354,
-      "sha256": "bd188078351aaea26131118ab6964a33ba510a0c3b05944a1130e3aa10355980",
+      "bytes": 5350,
+      "sha256": "deae774cc51c631092e3572a9056b55f890e24e6e50fc93341f0aa336ddb1ac4",
       "imageOnly": false,
       "truth": {
         "vendor": "Amazon Web Services, Inc.",
@@ -267,8 +267,8 @@
       "sourceDetail": "Finance/2025/Q1/Software",
       "sourceRef": "1gW3rX-figma-organization-annual",
       "mimeType": "application/pdf",
-      "bytes": 4423,
-      "sha256": "0f42f5dd819d6d87855bbfd054e1c0d20511292347b208f1f15fba5cd952f7b8",
+      "bytes": 4419,
+      "sha256": "206f1d00eee684ecd9c859318d4db8fb7ca9edc5f8cd207019a81936ae5c0191",
       "imageOnly": false,
       "truth": {
         "vendor": "Figma, Inc.",
@@ -291,8 +291,8 @@
       "sourceDetail": "Finance/2025/Q1/Software",
       "sourceRef": "1gW3rX-google-workspace-jan",
       "mimeType": "application/pdf",
-      "bytes": 4134,
-      "sha256": "3ec024d0327c3035dc2ef717379fa862f846afbe23702bb8acf5322293e0a624",
+      "bytes": 4130,
+      "sha256": "8f2a43827dc6792090d02279158fd90ad086cd56996b1ddf7151269d1814acf0",
       "imageOnly": false,
       "truth": {
         "vendor": "Google LLC",
@@ -315,8 +315,8 @@
       "sourceDetail": "Finance/2025/Q1/Software",
       "sourceRef": "1gW3rX-google-workspace-feb",
       "mimeType": "application/pdf",
-      "bytes": 4136,
-      "sha256": "3cef395971b5146b0c1fcab90c74482f041a0a5e8b7e3a3b0d2810118d006763",
+      "bytes": 4132,
+      "sha256": "733a8df1859b1a9109a38c285e09f99bd5d21ad16768385220f327b5c01ea086",
       "imageOnly": false,
       "truth": {
         "vendor": "Google LLC",
@@ -339,8 +339,8 @@
       "sourceDetail": "Finance/2025/Q1/Software",
       "sourceRef": "1gW3rX-google-workspace-mar",
       "mimeType": "application/pdf",
-      "bytes": 4129,
-      "sha256": "657fb785c55b2f0edbf65baae902828f0c3a71fcfcc7d2b98b772fa6614d828c",
+      "bytes": 4125,
+      "sha256": "4ba19417f98a3182447ec5ffd5e372faf85b4aeb2ac1d0cc09885f3cdba3d3bf",
       "imageOnly": false,
       "truth": {
         "vendor": "Google LLC",
@@ -363,8 +363,8 @@
       "sourceDetail": "Finance/2025/Q1/Rent",
       "sourceRef": "1bR8mS-wework-jan-2025",
       "mimeType": "application/pdf",
-      "bytes": 4018,
-      "sha256": "722ed7553daff26f5b1d94e70e5f619b16a722a10b764c4d4a6ddf60bc51c94e",
+      "bytes": 4014,
+      "sha256": "649668847b11402e74623995445044d40ceee7602550d32b93b265dffd92062b",
       "imageOnly": false,
       "truth": {
         "vendor": "WeWork",
@@ -387,8 +387,8 @@
       "sourceDetail": "Finance/2025/Q1/Rent",
       "sourceRef": "1bR8mS-wework-feb-2025",
       "mimeType": "application/pdf",
-      "bytes": 4021,
-      "sha256": "4cc549373ad3b69a20dc33ba24ffb6be893da5406c84d4f39b50e3561d3c0805",
+      "bytes": 4017,
+      "sha256": "c2fca316446ba3d69ef4e40f233e4333bef30e04c23837fba0c1a61a2953a490",
       "imageOnly": false,
       "truth": {
         "vendor": "WeWork",
@@ -411,8 +411,8 @@
       "sourceDetail": "Finance/2025/Q1/Rent",
       "sourceRef": "1bR8mS-wework-mar-2025",
       "mimeType": "application/pdf",
-      "bytes": 4012,
-      "sha256": "99ea63c283f3c37e8dc39eb8019c3cf52e35962d81dda30740d6c46cb7cd42d0",
+      "bytes": 4008,
+      "sha256": "8e047ad36f6cefd12811e968a05e7098a4d5dec3482a0f0170799bd23378c288",
       "imageOnly": false,
       "truth": {
         "vendor": "WeWork",
@@ -435,8 +435,8 @@
       "sourceDetail": "Finance/2025/Q1/Insurance",
       "sourceRef": "1cS9nT-statefarm-gl-q1",
       "mimeType": "application/pdf",
-      "bytes": 4378,
-      "sha256": "56e2a0ccc6ac39500b20d2c52187aa01e7028c9238e39f8470d3f428709d8064",
+      "bytes": 4374,
+      "sha256": "1cd38c74eaff8f60512ee88d04ecc53fc0aab7494a66c3411935fba5d27bf550",
       "imageOnly": false,
       "truth": {
         "vendor": "State Farm Fire and Casualty Company",
@@ -457,8 +457,8 @@
       "sourceDetail": "Finance/2025/Q1/Professional services",
       "sourceRef": "1hX4sY-harbor-legal-2291",
       "mimeType": "application/pdf",
-      "bytes": 4625,
-      "sha256": "dad0a7670e808fecab9599cd2ba68d6c7ece06857041f394ae2147ae48f189ae",
+      "bytes": 4621,
+      "sha256": "52a0f35c5b6c8041dce2e88b936e6844b5cf56eec50d51b365aba5872af5064b",
       "imageOnly": false,
       "truth": {
         "vendor": "Harbor Legal LLP",
@@ -482,8 +482,8 @@
       "sourceDetail": "photographed and uploaded by the office manager",
       "sourceRef": "upload-staples-0211",
       "mimeType": "application/pdf",
-      "bytes": 3883,
-      "sha256": "558fe8b4476573127f289e05f0b95ae81a90f1879ebf73ed633b2e144681a5f0",
+      "bytes": 3879,
+      "sha256": "5c685fed001561be7cdcb29f7829c419d999ff8a550487bfaf3a3890134fc7a0",
       "imageOnly": false,
       "truth": {
         "vendor": "Staples",
@@ -506,8 +506,8 @@
       "sourceDetail": "from: DeltaAirLines@e.delta.com",
       "sourceRef": "msg-18f1c0d4e881",
       "mimeType": "application/pdf",
-      "bytes": 5694,
-      "sha256": "adf508998500a4ebf85acdaa53ffc00652eb5084a795e7e4a18c990556b4c5ed",
+      "bytes": 5690,
+      "sha256": "e07f48eb828866e12c74b0901230ba80d6ac28da104b7f3c5682efd9c868bd0e",
       "imageOnly": false,
       "truth": {
         "vendor": "Delta Air Lines, Inc.",
@@ -528,8 +528,8 @@
       "sourceDetail": "emailed by the hotel, forwarded and uploaded",
       "sourceRef": "upload-hyatt-folio-884213",
       "mimeType": "application/pdf",
-      "bytes": 5616,
-      "sha256": "71602f86c15cf11cfc360c364f39dd6e296b32a0576418cc146107834e57bf6c",
+      "bytes": 5612,
+      "sha256": "f1b09e8fdac3d8e98b32fa81eb7a56ac625a3f79dd2382ddf4cad1ac9f00bdab",
       "imageOnly": false,
       "truth": {
         "vendor": "Hyatt Regency San Francisco",
@@ -551,8 +551,8 @@
       "sourceDetail": "photographed and uploaded by the office manager",
       "sourceRef": "upload-cascade-0304",
       "mimeType": "application/pdf",
-      "bytes": 4001,
-      "sha256": "4bf6d68c4f5a0dc8b0ae6d8f10c8df5f50b98a0b3e029c8dd3201a4dfa45f9e5",
+      "bytes": 3997,
+      "sha256": "aa889a7e8ab2b98fffd6fb506fd99bbdf88d7a1a04278a657d442b1328fabb59",
       "imageOnly": false,
       "truth": {
         "vendor": "Cascade Kitchen",
@@ -576,8 +576,8 @@
       "sourceDetail": "from: message@adobe.com",
       "sourceRef": "msg-18ec0b1177a4",
       "mimeType": "application/pdf",
-      "bytes": 4158,
-      "sha256": "1654ad75ad36fbddc429d626eaa1fac93e41fa4c0b4a1393091220f00af7a275",
+      "bytes": 4154,
+      "sha256": "b6e549f2fbd529f98bc55e06d95d54de814b9c8c8cc3efc1e843b26b7e4501e8",
       "imageOnly": false,
       "truth": {
         "vendor": "Adobe Inc.",
@@ -599,11 +599,11 @@
       "id": "doc_f26",
       "file": "Adobe_Invoice_ADB-88214 (1).pdf",
       "source": "drive",
-      "sourceDetail": "Finance/2025/Q1/Software \u2014 saved a second time from the same email",
+      "sourceDetail": "Finance/2025/Q1/Software — saved a second time from the same email",
       "sourceRef": "1dT0oU-adobe-invoice-adb-88214-1",
       "mimeType": "application/pdf",
-      "bytes": 4158,
-      "sha256": "1654ad75ad36fbddc429d626eaa1fac93e41fa4c0b4a1393091220f00af7a275",
+      "bytes": 4154,
+      "sha256": "b6e549f2fbd529f98bc55e06d95d54de814b9c8c8cc3efc1e843b26b7e4501e8",
       "imageOnly": false,
       "copyOf": "doc_f25",
       "truth": {
@@ -630,8 +630,8 @@
       "sourceDetail": "Finance/2025/Q1/Marketing",
       "sourceRef": "1iY5tZ-northgate-print-4471",
       "mimeType": "application/pdf",
-      "bytes": 4777,
-      "sha256": "5a72e3f812f0e999fbf5701ea1cffbb253ebba7dc985b935b4ff93162345c79f",
+      "bytes": 4773,
+      "sha256": "5106a08c58fa130fa5477da4c75b38c99d139f267fe93f1ed8a05b73158114e5",
       "imageOnly": false,
       "truth": {
         "vendor": "Northgate Print Works",
@@ -657,8 +657,8 @@
       "sourceDetail": "from: rechnung@hetzner.com",
       "sourceRef": "msg-18f0aa3311d6",
       "mimeType": "application/pdf",
-      "bytes": 4889,
-      "sha256": "2b447c87b1d518a88a4ef34d6cc416821035e21be7e438a62d3b6c72bef3b1b6",
+      "bytes": 4885,
+      "sha256": "710915888431a9d2b2790163635d6762a58507a4dd715565846bc3fd16171b4b",
       "imageOnly": false,
       "truth": {
         "vendor": "Hetzner Online GmbH",
@@ -671,7 +671,7 @@
         "direction": "expense",
         "docType": "invoice-received",
         "expectedCategoryId": "expense-office",
-        "note": "Priced in euros. The period is USD, so this is flagged rather than converted \u2014 no exchange rate is stated on the document."
+        "note": "Priced in euros. The period is USD, so this is flagged rather than converted — no exchange rate is stated on the document."
       },
       "expectedExceptions": [
         "currency-mismatch"
@@ -684,8 +684,8 @@
       "sourceDetail": "scanned to the shared folder by the office scanner",
       "sourceRef": "upload-scan-20250312",
       "mimeType": "application/pdf",
-      "bytes": 28184,
-      "sha256": "836028f2825b7d8611d4b06133195eb7d488e77a5f0664a30eb9864eaab1d5a4",
+      "bytes": 28180,
+      "sha256": "d4a4efc15878f756eba935d0f745a5b0376b75dc002d131f1aa4b43aedc17b1a",
       "imageOnly": true,
       "truth": {
         "vendor": null,
@@ -709,8 +709,8 @@
       "sourceDetail": "from: no_reply@email.apple.com",
       "sourceRef": "msg-18e7f3b09912",
       "mimeType": "application/pdf",
-      "bytes": 4146,
-      "sha256": "e56046ed13e9c22dc6d555b77859ef5d80a6d4e5fce5e7a4a76aecc4346477bc",
+      "bytes": 4142,
+      "sha256": "3ec75c32d9f1c7dc78bd35f64fa05c4c27c64a19efea0607f8d1d10b4176f3d8",
       "imageOnly": false,
       "truth": {
         "vendor": "Apple Inc.",
@@ -737,8 +737,8 @@
       "sourceDetail": "Finance/2025/Q1/Utilities",
       "sourceRef": "1jZ6uA-verizon-feb-2025",
       "mimeType": "application/pdf",
-      "bytes": 3897,
-      "sha256": "201632f595e85950c32a2dd68df41afb525297bd03d0893ba047407697b32853",
+      "bytes": 3893,
+      "sha256": "5c0da24ce96a5535051ddc159c1c33adeab2df6feb26ec8b07b4d8489614395f",
       "imageOnly": false,
       "truth": {
         "vendor": "Verizon Wireless",
@@ -762,8 +762,8 @@
       "sourceDetail": "photographed and uploaded by the office manager",
       "sourceRef": "upload-wfm-0227",
       "mimeType": "application/pdf",
-      "bytes": 4519,
-      "sha256": "aceeb1599348cc537acf479366a5c794ebcb467b3ee328187bf31dca3677606f",
+      "bytes": 4515,
+      "sha256": "0c77cfe165c1c746d4737874100a9e0777e383c6e4dee67f3a11cdc130f12699",
       "imageOnly": false,
       "truth": {
         "vendor": "Whole Foods Market",
@@ -790,8 +790,8 @@
       "sourceDetail": "from: priya@ramanconsulting.dev",
       "sourceRef": "msg-18e9002b41c8",
       "mimeType": "application/pdf",
-      "bytes": 4259,
-      "sha256": "cccf04f361c27e4bf26aeca3ff550da1ff638b01a3a501922e608bdf2dbda042",
+      "bytes": 4255,
+      "sha256": "2e7b5f1638a4abaaac9f00602e890f8032e7ddb78f9cf899ba5ee668b327efbb",
       "imageOnly": false,
       "truth": {
         "vendor": "Raman Consulting",
@@ -819,8 +819,8 @@
       "sourceDetail": "from: priya@ramanconsulting.dev",
       "sourceRef": "msg-18f4b21c0d55",
       "mimeType": "application/pdf",
-      "bytes": 4310,
-      "sha256": "ab6fe668144c8f116f5dc5e12de752bcf21ae2a5334dae7be3f79535bab5a4be",
+      "bytes": 4306,
+      "sha256": "74859f2376e06aeb876ba0cb13374cc78153f64dbe47186ba9d0483feacbbe7c",
       "imageOnly": false,
       "truth": {
         "vendor": "Raman Consulting",
@@ -847,8 +847,8 @@
       "sourceDetail": "from: tom@alvarezmotion.com",
       "sourceRef": "msg-18f6d09a11bb",
       "mimeType": "application/pdf",
-      "bytes": 4004,
-      "sha256": "5c4750abe957b1de28f0324175674ddacf2c5e09d311eeb141d884ed37baf778",
+      "bytes": 4000,
+      "sha256": "eed5fcff35bd6d77d37c3d8c8c9ffb22f679151cc8490282d1cdd6f520c8e574",
       "imageOnly": false,
       "truth": {
         "vendor": "Alvarez Motion",
@@ -862,7 +862,7 @@
         "docType": "invoice-received",
         "expectedCategoryId": "expense-contract-labor",
         "vendorTaxId": "84-1907733",
-        "note": "The negative case. Contract labour with a tax id on file and a period total of 520.00, below the 600.00 threshold \u2014 nothing should be raised against it."
+        "note": "The negative case. Contract labour with a tax id on file and a period total of 520.00, below the 600.00 threshold — nothing should be raised against it."
       },
       "expectedExceptions": []
     },
@@ -873,8 +873,8 @@
       "sourceDetail": "Finance/2025/Q1/Insurance",
       "sourceRef": "1eU1pV-meridian-q1-premium",
       "mimeType": "application/pdf",
-      "bytes": 4361,
-      "sha256": "daa7b2553453a09dd41f27dfa115876d298aa96be18003ed6907d60d4db954f9",
+      "bytes": 4357,
+      "sha256": "5e00bd169eee05362b58bd406c1d7c8916608c4941d314f7d2a6fd5eb8e61ec3",
       "imageOnly": false,
       "truth": {
         "vendor": "Meridian Health Plan",
@@ -898,8 +898,8 @@
       "sourceDetail": "Finance/2025/Q1/Vehicle",
       "sourceRef": "1fV2qW-mileage-log-q1",
       "mimeType": "application/pdf",
-      "bytes": 7290,
-      "sha256": "7b62f2fda3096f426e3ae853806963534280cfe2d86899f04e23e5dc0529d63e",
+      "bytes": 7286,
+      "sha256": "6830f92981857a6e8dde95b57cf0b1b73c8c349a4b376918033620164c17bedc",
       "imageOnly": false,
       "truth": {
         "vendor": "Northwind Studio LLC",
@@ -924,8 +924,8 @@
       "sourceDetail": "from: hello@koyo.studio",
       "sourceRef": "msg-18e2119c00ab",
       "mimeType": "application/pdf",
-      "bytes": 4382,
-      "sha256": "aa1ff6ce3c41faf55e1d13d5d4add7fab7a05545eecea0be09a8a71d6dcb9d09",
+      "bytes": 4378,
+      "sha256": "30ce8f4cb61a3a9c5adb86bd7d049d49dd7e7ead5f8f3ec950eb8c942770ebe6",
       "imageOnly": false,
       "truth": {
         "vendor": "Koyo Studio",
@@ -953,8 +953,8 @@
       "sourceDetail": "from: accounts@brightanvil.io",
       "sourceRef": "msg-18f9c1a20d33",
       "mimeType": "application/pdf",
-      "bytes": 4092,
-      "sha256": "dd756990b661219fd666d9ce6ee6012f8f12ff1b6517558f555fa67e7ce2240a",
+      "bytes": 4088,
+      "sha256": "88adb1c906258d8ba8cc5dfc598b55a0fa23c52848495004eb85a14a0d9b45a8",
       "imageOnly": false,
       "truth": {
         "vendor": "Bright Anvil Labs",
@@ -976,6 +976,7 @@
       ]
     }
   ],
+  "ledgerFile": "ledger-2025-q1.csv",
   "ledgerRowCount": 38,
   "ledgerColumns": [
     "date",
@@ -1206,7 +1207,7 @@
   "expectedClean": [
     {
       "docId": "doc_f35",
-      "why": "Contract labour, tax id printed, 520.00 in the period \u2014 below the 600.00 threshold. Nothing should be raised."
+      "why": "Contract labour, tax id printed, 520.00 in the period — below the 600.00 threshold. Nothing should be raised."
     },
     {
       "docId": "doc_f24",

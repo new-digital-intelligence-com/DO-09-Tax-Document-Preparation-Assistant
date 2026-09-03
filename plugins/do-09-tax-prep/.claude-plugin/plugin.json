@@ -1,7 +1,7 @@
 {
   "name": "do-09-tax-prep",
-  "displayName": "DO-09 — Tax Document Preparation Assistant",
-  "description": "NDI's DO-09 AI Employee. Sweeps Google Drive and Gmail for a filing period's invoices and receipts, reads each document, categorises it against the firm's tax chart, reconciles it against the ledger, raises an exception for every discrepancy rather than adjusting one away, drafts Schedule C, a 1099-NEC summary and a 1040-ES worksheet, and assembles the package a tax manager reviews. Nothing it produces is filed, submitted or signed.",
+  "displayName": "DO-09 \u2014 Tax Document Preparation Assistant",
+  "description": "NDI's DO-09 AI Employee. Collects a filing period's invoices and receipts into a shared Google Drive workspace, reads each document, categorises it against the firm's tax chart, raises an exception for every discrepancy rather than adjusting one away, drafts Schedule C, a 1099-NEC summary and a 1040-ES worksheet, and assembles the package a tax manager reviews. Nothing it produces is filed, submitted or signed.",
   "author": {
     "name": "New Digital Intelligence"
   },
@@ -13,7 +13,6 @@
     "receipts",
     "invoices",
     "expense-categorisation",
-    "reconciliation",
     "schedule-c",
     "1099-nec",
     "google-drive",

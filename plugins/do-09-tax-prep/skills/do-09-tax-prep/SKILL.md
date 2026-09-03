@@ -1,17 +1,19 @@
 ---
 name: do-09-tax-prep
-description: Prepare a filing period from source documents. Use whenever the user wants to collect invoices, receipts or statements for a quarter or a year; sort them into tax categories; reconcile documents against a ledger; find missing invoices or unsupported ledger entries; see what is flagged before an accountant looks at it; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble a review package for a tax manager. It files nothing.
+description: Prepare a filing period from source documents. Use whenever the user wants to collect invoices, receipts or statements for a quarter or a year; add documents from their Google Drive; sort them into tax categories; see what is flagged before an accountant looks at it; ask questions about what has been collected; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble and email a review package for a tax manager. It files nothing.
 ---
 
 # Tax Document Preparation Assistant
 
 Collect a filing period's invoices, receipts and financial documents, read each
-one, categorise it against the firm's chart, reconcile it against the ledger,
-flag every inconsistency for a human, and assemble the package a tax manager
-reviews.
+one, categorise it against the firm's chart, flag every inconsistency for a
+human, and assemble the package a tax manager reviews.
 
-Documents come from **two connectors**: Google Drive for the finance folders and
-Gmail for everything that only ever arrived as an attachment.
+**You do everything the web app does.** Same workspace, same documents, same
+register, same rules — a person who starts a quarter in the app and finishes it
+here should not be able to tell where one stopped and the other began. What
+differs is only how you reach Google: the app has its own OAuth client, and you
+use **the user's own connectors**.
 
 **The one thing this skill will not do is file.** Every form it produces is a
 draft, and a person reviews the pack and files it. You prepare what they review.
@@ -30,123 +32,149 @@ prompt that can drift from them.
 The three that everything else hangs off:
 
 1. **Nothing is filed.** No submission, no signature, no "final".
-2. **Flag, never fix silently.** The difference between a document and the
-   ledger is the finding. Adjusting it away destroys the evidence.
+2. **Flag, never fix silently.** Anything that does not add up is the finding.
+   Adjusting it away destroys the evidence that something is wrong.
 3. **No tax advice.** Deductibility is not yours to decide. Route it with the
    document attached.
 
 ## 2. Check the connectors are actually there
 
-A skill is instructions only; it carries no tool access. Everything below needs
-the connectors attached in this client, and you need no credentials of your own
-— no folder id, no mailbox, no token.
+A skill is instructions only; it carries no tool access. You need the user's own
+connectors attached in this client, and **no credentials of your own** — no
+token, no OAuth client. The web app has its own server-side credentials for the
+same Drive folder; those are the app's and never yours.
 
-Confirm you can see both before starting:
-
-| Connector | Gives you | Without it |
+| Connector | What you do with it | Without it |
 |---|---|---|
-| **Google Drive** | The finance folders: invoices out, receipts in, statements, the ledger export | No corpus. You can read a mailbox and prepare nothing |
-| **Gmail** | Invoices and receipts that only ever arrived as attachments — the ones nobody filed | A period that looks complete and is missing every emailed receipt |
+| **Google Drive** | Read and write the shared workspace folder — the whole register — and import documents the user already has in their own Drive | Nothing works. Stop and say so |
+| **Gmail** | **Send only:** email the finished review package from the user's own address | Everything else works; the pack is downloaded and sent by hand |
 
 Names differ by client. In the Claude app they appear as
 `mcp__claude_ai_Google_Drive__*` and `mcp__claude_ai_Gmail__*`; in Claude Code
 they follow whatever the connector is registered as. Check for the capability,
 not for an exact string.
 
-**If either is missing, say plainly which one and stop.** That is the operator's
-to fix, not yours. Do not answer from memory and do not proceed on one
-connector while implying you swept both — a period assembled from half its
-sources is not an incomplete answer, it is a wrong one, and it reads as
-complete. A sweep that could not run reports as *not checked*, never as zero
-documents. See [references/connectors.md](references/connectors.md) for what
-each one can and cannot tell you.
+**Gmail is for sending, never for collecting.** Do not search anybody's mailbox
+for invoices, do not list their attachments, and do not read a message body into
+the register. That was built into the app and deliberately removed along with
+the permission behind it: a tax workspace is the worst possible place to
+accumulate somebody's correspondence. If a user wants an emailed invoice in the
+period, they save it and add it as a document like any other.
 
-### When no connector is attached: the local corpus
+**If Drive is missing, say so plainly and stop.** Do not answer from memory, and
+do not substitute the repo's fixture corpus for their data — a generated corpus
+reported as their quarter is not an incomplete answer, it is a wrong one, and it
+reads as complete.
 
-This repo ships a generated corpus that stands in for a real sweep, and in
-Claude Code with the repo open it is the source to work from:
+[references/connectors.md](references/connectors.md) has what each connector can
+and cannot tell you — why a file's `modifiedTime` is not the document's date,
+why a folder is not a categorisation, and what "nothing found" does and does not
+mean.
 
-```
-fixtures/manifest.json        39 documents, their sources and their known truth
-fixtures/documents/           the PDFs themselves
-fixtures/ledger-2025-q1.csv   38 ledger rows, the accounting system's side
-```
+The repo's `fixtures/` corpus exists to test this pipeline, not to answer with.
+In Claude Code you may read it to check your own work against
+`fixtures/manifest.json`, which records each document's known truth. Never
+report a figure from it as a fact about the user's business.
 
-It is one entity and one period: **Northwind Studio LLC, 2025 Q1**
-(`period_2025_q1`, 2025-01-01 to 2025-03-31, cash basis, USD, US federal).
+## 3. Establish the workspace, then the period
 
-Two things about the manifest. It records where each document *would* have come
-from — a Drive folder, a Gmail sender — so the sweep's shape is real even though
-no sweep ran. And `expectedFindings` is the corpus's known truth, there so a run
-can be checked against it. **Use it to verify your work, never to answer with.**
-Reading the answer key and reporting it as a finding is not a preparation, and
-the documents are right there to read.
+**Read [references/workspace.md](references/workspace.md) before touching
+anything.** It has the folder layout, where every collection lives, and how to
+add and remove a document so that the app agrees with you afterwards.
 
-In the Claude app there is no filesystem, so there is no corpus either. With no
-connectors and no repo, say so and stop.
+Two things are settled before you do any work, in this order.
 
-## 3. The period is the unit of work
+### First: whose workspace
 
-Everything is scoped to a filing period: an entity, a start and end date, a
-basis, a currency and a jurisdiction. Nothing is prepared "in general".
+Everything is stored under one shared Drive folder,
+**`1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`**, with one subfolder per person. Every
+figure you will quote belongs to somebody's business, and answering out of the
+wrong folder reports one company's income as another's.
 
-Establish the period **before** the first search, not after. Scoping a sweep
-afterwards means the wider set was already collected, and data minimisation is a
-rule here rather than a preference — a sweep that pulls a vendor's whole history
-to file one quarter has taken documents nobody asked for.
+So the very first thing you do — before a search, before a question about a
+quarter, before reading one document — is list the workspaces under that root
+and **put them to the user as options**, each labelled with its entity and how
+many documents it holds, plus a final option to start a new one. If they want a
+new one, ask for the name and create the folder structure. The steps are in the
+workspace reference.
 
-- **Cash or accrual decides which date rules.** On a cash basis the payment date
-  places a document in the period; on accrual it is the invoice date. Ask, do
-  not assume.
-- **The reporting currency is the period's.** A document in another currency is
-  flagged, never converted — no rate is printed on it, and a rate you chose is a
-  figure nobody can check.
-- **A document dated outside the period is a finding**, not a document to file
-  quietly under the neighbouring quarter.
+Never guess which workspace. Never default to the first. Never carry one over
+from an earlier conversation without saying which one you are in.
+
+### Then: the period
+
+The period is an entity, a label, dates, a basis and a currency, and it lives in
+`state/settings.json`. Read it rather than asking — it is already set.
+
+- **The dates constrain nothing.** No document is rejected, excluded or flagged
+  for falling outside them. Read every document on its own terms: its date is
+  whatever is printed on it. Never tell somebody their document is out of period
+  and never file one "quietly under the neighbouring quarter" — there is no
+  quarter to file it under, only a register it is in or is not in.
+- **A second currency is a fact about the business, not a fault.** A document in
+  another currency is listed, read and categorised like any other, and quoted in
+  its own currency. The one thing it cannot do is join a total in a different
+  currency, because nothing here converts at a rate nobody chose. Never convert.
+- **Cash or accrual, and the entity name, are on the period already.** If the
+  user wants either changed, that is an edit to `settings.json` — offer it, do
+  not assume it.
 
 ## 4. The three workflows
 
-### A. The collection sweep
+### A. Collecting documents
 
-Find the period's documents, in both places, and know what you did not find.
+Documents reach the workspace two ways, and both end in the same place —
+`input/` with a row in `state/documents.json`.
 
-1. **Scope it.** Entity, period start and end, and the finance folder root.
-2. **Sweep Drive**, folder by folder under the year and quarter. Record the file
-   id and the folder it came from — provenance is what lets a reviewer go back
-   to the original.
-3. **Sweep Gmail** for the same window: attachments from billing senders,
-   invoice and receipt subjects, and the sent folder for invoices raised. The
-   heuristics are in [references/connectors.md](references/connectors.md).
-4. **Report the sweep as a sweep**: how many documents from each source, which
-   folders were read, which searches ran, and what could not be read. Zero
-   receipts from a broken search is not "no expenses".
-5. **Duplicates are kept, not dropped.** The same invoice from a Drive folder and
-   from the mailbox it arrived in is a duplicate a person should see.
+1. **From the user's own Drive.** They name what they are looking for; you
+   search *their* Drive for PDFs and scans, put the matches to them **as
+   options**, and copy across only what they tick. Copy the bytes, never a
+   reference: a link into somebody's personal Drive breaks the moment they move
+   or rename the file, and a package that cannot produce the document behind a
+   figure is not a package.
+2. **Already in the workspace.** Files put into `input/` directly — by the app,
+   or by a person dragging them in — are already there. Compare `input/` against
+   `state/documents.json` and register anything that is not on the list.
 
-The sweep collects. It does not decide what is in scope beyond the period, and
-it does not read the documents yet.
+Then, whichever way they arrived:
 
-### B. Categorisation and reconciliation
+3. **Report the collection as a collection**: how many arrived, from where, and
+   what could not be read. Zero documents from a search that failed is not "no
+   expenses".
+4. **Duplicates are kept, not dropped.** The same invoice arriving twice is a
+   finding a person should see — a vendor billing twice and a folder synced
+   twice look identical from here.
+
+Collecting does not read the documents. That is next, and it is separate so a
+person can see their files land before anything slow starts.
+
+### B. Reading and categorising
 
 1. **Read each document.** Vendor, dates, invoice number, currency, subtotal,
    tax, total, line items, payment method. A document that cannot be read is
    recorded as unreadable *with its filename* and goes on the open-items list.
    Never guess a total from a filename.
-2. **Categorise against the chart** in
+2. **The vendor is the other party.** On a receipt or a bill it is who was paid
+   — never the workspace's own entity, whose name is printed on the document
+   just as prominently. Getting this backwards turns an expense into income.
+3. **Categorise against the chart** in
    [references/categories.md](references/categories.md), with a rationale from
    the document's own contents and a confidence. Anything landing in a category
    marked `alwaysReview` goes to a human whatever the confidence.
-3. **Reconcile against the ledger.** Match on counterparty, date proximity and
-   amount. Three outcomes: matched, document with no ledger entry, ledger entry
-   with no document. A pairing where the amounts differ is *matched with a
-   delta*, and the delta is reported, never rounded off.
-4. **Flag.** Every discrepancy becomes an exception with the actual figures, the
+4. **Uncategorised is a real answer.** A document you genuinely cannot place
+   goes to `uncategorised` with the reason, and its amount reaches no form line.
+   Guessing a category to make the draft look complete is the failure that
+   category exists to prevent.
+5. **Flag.** Every discrepancy becomes an exception with the actual figures, the
    filenames, a severity and an action a person can take. "Check this" with no
    reason is a to-do the reviewer has to reconstruct, and they will skip it.
 
-Escalate rather than queue when you see a fraud indicator, a backdated document
-or a material unexplained gap. The rules file says concretely what each looks
-like.
+**Work one document at a time and say so as you go.** Reading a batch in silence
+and returning a summary at the end leaves somebody unable to tell a working run
+from a stuck one. Name each document as you finish it.
+
+Escalate rather than queue when you see a fraud indicator or a material
+unexplained gap. The rules file says concretely what each looks like.
 
 ### C. Draft forms and package assembly
 
@@ -163,37 +191,48 @@ that opens with nine open items invites someone to work them.
 Hand it to a **named** person, and never to the address that prepared it. A
 second person reviewing before anything is filed is the whole point.
 
-## 5. The companion web app
+## 5. Everything the app does, you do
 
-If `http://localhost:3000` answers, its HTTP API does all of the above against a
-real register — documents, extractions, categorisations, the ledger, matches,
-exceptions, drafts, packages and an append-only audit trail — one call each.
-See [references/app-api.md](references/app-api.md). Prefer it when it is there:
-it writes the record and the audit row in the same step, and it enforces the
-rules in code rather than in a prompt. There is no environment variable for the
-base URL; if it runs elsewhere, ask once and use that for the session.
+The app and this skill share one register in one Drive folder, so there is no
+"the app's data" and "your data" — there is the workspace, and two ways in.
 
-The app and this skill are **separate registers**. A document you read from
-Drive is not in the app until it is ingested there, and a finding the app raised
-is not something a sweep can see. Say which one an answer came from.
+If `http://localhost:3000` answers, **prefer its HTTP API** for anything it
+covers. It writes the record and the audit row in the same step and enforces the
+rules in code rather than in a prompt, which is strictly safer than doing the
+same edits by hand. See [references/app-api.md](references/app-api.md). There is
+no environment variable for the base URL; if it runs elsewhere, ask once and use
+that for the session.
 
-Neither Drive nor Gmail is wired into the app in this build: its corpus is the
-generated fixtures. Be honest about that everywhere.
+If it does not answer, do the same work through the Drive connector against the
+same files, following [references/workspace.md](references/workspace.md). The
+outcome must be indistinguishable: same folder, same JSON shapes, same audit
+rows. A person who opens the app afterwards should find your work already there.
+
+Say which route an answer came from when it matters — "read from the register"
+and "read the file myself just now" are different claims.
 
 | The user wants to | Do this |
 |---|---|
-| Know where the period stands | `GET /api/status`. Lead with open exceptions by severity, not with the money. `sources[]` says which sweeps ran; `available: false` is an absent connector, not an empty source. Money figures are `null` until the step that produces them has run — `null` is not zero. |
-| Start a quarter | Establish entity, period, basis and currency first. Then sweep, ingest, extract, categorise, import the ledger, reconcile, detect. In that order — each step reads the one before. |
-| Find what is missing | The reconciliation's ledger-only side plus `missing-support` and `missing-period` findings. Name the vendor, the amount and the date for each. |
-| Know why something was flagged | `GET /api/exceptions`. Read out the detail verbatim — it carries the figures — then the suggested action. |
+| Pick or start a workspace | List the folders under the shared root, offer them **as options** with entity and document count, plus "start a new one". This happens first, every conversation. See [references/workspace.md](references/workspace.md). |
+| Know where the period stands | `GET /api/status`, or read `state/`. Lead with open items by severity, not with the money. Money figures are `null` until the step that produces them has run — `null` is not zero. |
+| Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/` and register them. `POST /api/import/drive` does it when the app is up. |
+| Add a document they hand you | Upload the bytes to `input/`, register it, audit it. `POST /api/documents` when the app is up. |
+| Read and categorise what has arrived | `POST /api/documents/{id}/process` one document at a time, naming each as it finishes. Without the app, read and categorise them yourself and write the rows. |
+| See what is in the period | `GET /api/documents`, or `state/documents.json` joined with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
+| Answer a question about the corpus | Search before answering. "Do I have an X subscription" is a question you look up, not one you offer to look up. An empty result is an answer; say what you searched for. |
+| Delete a document | Ask for a reason first — it is required and it goes on the trail. Then remove **all** of it: the row, the reading, the categorisation, the findings only about it, the file in `input/`, and `output/<sha256>.json`. `DELETE /api/documents/{id}` with `{reason}` does all six. Missing the last one means re-uploading the same file silently restores the old figures. |
+| Change the period's name, entity or dates | `PUT /api/settings/period`, or edit `state/settings.json`. **Never change the period's id** — every document points at it, so a new id detaches the corpus. |
+| Know why something was flagged | `GET /api/exceptions`, or `state/exceptions.json`. Read the detail verbatim — it carries the figures — then the suggested action. |
 | Close a flag | You cannot. Say which screen does it, whether it is `resolved` or `accepted` (they mean different things), and draft the note the person will have to type. |
 | Change a document's category | You cannot. `POST /api/classify/override` is a human action needing a note; the model's answer is kept beside theirs, not overwritten. |
-| Know what a document says | Read the extraction. Quote the vendor, the filename and the figure every time, never "the invoice". |
 | See the totals for a category | `GET /api/categories`, which carries `recorded` and `deductible` per category. They differ where `deductiblePct` does, and the difference is a statutory limit, not a discrepancy. |
 | Draft the forms | `POST /api/forms`. Every line that was adjusted says why. Quote nothing off one without the word draft. |
-| Assemble the package | `POST /api/packages`, then `POST /api/packages/handoff` to a named reviewer. It records the handoff; it sends no mail and it files nothing. |
+| Assemble the package | `POST /api/packages`, then `POST /api/packages/handoff` to a named reviewer. It records the handoff; it files nothing. |
+| Get the package as a PDF | `GET /api/packages/pdf` (add `?id=` for an older pack). Paginated, marked DRAFT on every page. Without the app, hand them the markdown and say it is not the PDF. |
+| Email the package | `POST /api/packages/send` with `packageId` and `to` when the app is up; otherwise send it yourself through the Gmail connector from the user's own address, then record the handoff. **Confirm the recipient as a form first, and never send to check that it works** — there is no draft mode and the tax manager gets whatever you send. |
+| Keep a record of this conversation | Write the transcript to `conversations/` in the workspace as Markdown when the session produced figures worth keeping. Say that you saved it and where; never claim it if the write failed. |
 | File the return | Not available, to you or to the app. Say the package is ready for review and name the reviewer. |
-| Read the history | `GET /api/audit`. Append-only, refusals in it too. |
+| Read the history | `GET /api/audit`, or `state/audit.json`. Append-only, refusals in it too. It is also the only place a **deleted** document survives — search it by filename before telling anybody no record exists. |
 | Chase a missing invoice | Draft the request to the vendor with the dates and amounts exactly as recorded. Never invent an invoice number — a request naming an invoice that does not exist gets a confused reply and no invoice. |
 
 Three rows in that table end at a human by design: **filing**, **closing a
@@ -231,10 +270,16 @@ show what is open and copy a note for a person to paste. That is the line.
 
 ## 7. Ask with the question form, not prose
 
-**Every question you put to the user goes through the tappable question tool.**
-Not just the ones with options in them — every one. If you are about to end a
-sentence with "?" and then wait for an answer, that is a question, and it goes
-in the form.
+**Every question you put to the user goes through the tappable question tool,
+as options.** Not just the ones that obviously have choices in them — every one.
+If you are about to end a sentence with "?" and then wait for an answer, that is
+a question, and it goes in the form with real options to tap.
+
+This is not a stylistic preference. A person working a quarter is looking at
+their documents, not at a chat box; a question written as prose makes them stop,
+type, and often go and look something up you could have fetched. Options they
+can tap keep the work moving and make the choice exact — "2025 Q1, 1 Jan to 31
+Mar, 41 documents" cannot be misread the way "which period?" can.
 
 Its name differs by surface: **`ask_user_input_v0`** in the Claude app,
 **`AskUserQuestion`** in Claude Code. Use whichever is in your toolset. Not
@@ -243,7 +288,12 @@ other, and failing both, use a numbered list.
 
 | You need to know | Offer as options |
 |---|---|
+| **Which workspace** | **The real folders under the shared root, each with its entity and document count — plus "start a new one". This is the first question of every conversation.** |
+| A name for a new workspace | Ask plainly, and offer their own name and the entity name as candidates rather than an empty box |
 | Which period | The real periods in the workspace, with their dates and status — "2025 Q1, 1 Jan to 31 Mar, open" |
+| Which documents to import from their Drive | The real files your search found, by filename with the date and size — never "shall I search?" |
+| Whether to delete a document | The document named with its vendor and amount, and what goes with it, against "keep it" |
+| A reason for a deletion | Two or three plausible ones — duplicate, personal, wrong entity — plus their own words |
 | Which entity | The entities actually configured, never a blank field |
 | Which document | The real ones that match, by filename with vendor and amount — never a bare `doc_f27` |
 | Which exception | The real open ones, by title with the figure in it, highest severity first |
@@ -254,8 +304,12 @@ other, and failing both, use a numbered list.
 | A note or a summary | Two or three drafted candidates, not an empty box |
 
 Phrases that mean you got it wrong: "Could you clarify…", "Which one did you
-mean?", "Let me know if…", "Do you want me to…", "Please provide…". Every one of
-those is a form you did not build.
+mean?", "Let me know if…", "Do you want me to…", "Please provide…", "Would you
+like me to search for…". Every one of those is a form you did not build.
+
+The last is the commonest and the worst. If you can search, search — then offer
+what you found. Offering to look something up is a turn spent asking permission
+to do the thing you were asked to do.
 
 - **Never ask what you can determine.** Read the status, the register and the
   connector state first. A question you could have answered yourself is friction.
@@ -263,16 +317,17 @@ those is a form you did not build.
   still open, marks the period packaged" beats "yes". Never a bare yes/no.
 - **Recommend one, and put it first**, with the reason.
 - **Anything irreversible is confirmed this way** — assembling, handing off,
-  removing a document, importing over a ledger — never assumed from context.
+  removing a document, emailing a package — never assumed from context.
 - **One question at a time.** Several things missing means several forms in
   sequence, not one numbered list of fields.
 - **Fetch before you ask.** Offer the real documents, the real findings, the real
   periods, labelled recognisably. Making someone go and look up an id you could
   have fetched makes them leave the conversation to answer you.
 
-This binds on the first turn too. Invoked with no request, never open with "what
-would you like to do?" — read the state, show what is open and what is missing,
-then put the next step in the form.
+This binds hardest on the first turn. Invoked with no request, never open with
+"what would you like to do?" — list the workspaces, show what each holds, and
+put **that** in the form. The opening move of every conversation is a choice of
+workspace with real options, not a greeting and not an open question.
 
 **One exception, and it is absolute: never offer to file.** Not as an option,
 not as a default, not as "shall I just submit it". There is no such option to
@@ -291,8 +346,10 @@ here have different fixes and different consequences:
 
 | What you see | What it is | What it means for the answer |
 |---|---|---|
-| The Drive folder cannot be listed | Connector or permission problem | The document side is unknown. Not "no documents". |
-| A Gmail search returns nothing | Could be a genuine empty result, could be a wrong query | Say which query ran, so a person can tell the two apart. |
+| The shared root cannot be listed | Connector missing, or it has no access to that folder | You do not know whose workspaces exist. Stop; do not offer to create one blind. |
+| A workspace folder has no `state/` | Nobody has done any work in it yet | An empty workspace, not an empty quarter. Say which. |
+| A collection file is missing vs. `[]` | Not run yet vs. ran and found nothing | Never report the first as zero. This is the distinction that decides whether somebody files. |
+| Gmail send is refused | The connector lacks send permission, or it is not attached | The pack was **not** sent. Say so and offer the PDF instead — never report a send you did not make. |
 | A file will not open or has no text | An image-only scan, or a broken file | `unreadable`, with the filename, on the open-items list. Never a zero in a total. |
 | `400` from an app route changing a record | The required note was blank | Write the note. Every such route rejects a blank one. |
 | `503` from an app model route | `ANTHROPIC_API_KEY` is not set | Nothing was read. The corpus is not half-read, it is unread. |

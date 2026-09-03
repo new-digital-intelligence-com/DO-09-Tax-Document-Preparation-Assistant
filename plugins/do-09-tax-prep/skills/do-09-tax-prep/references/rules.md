@@ -238,7 +238,7 @@ A document that could not be read is a finding with a filename on the open-items
 is never dropped from a count to make a quarter look complete.
 
 A source that was not swept returned nothing, and nothing is not zero. Google Drive and
-Gmail are not wired into this build: say that they were not checked rather than reporting
+Gmail is not a source of documents at all: it sends the finished package and nothing more.
 no documents in them. The same holds for a model call that failed, a file missing from
 storage and a sweep that was never run — each is a state to report, never an empty
 result presented as a finding.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runAgent, type ChatMessage } from "@/lib/agent";
 import { explainModelError, modelConfigured } from "@/lib/anthropic";
 import { driveStatus } from "@/lib/drive";
+import { saveConversation } from "@/lib/conversations";
 import { activePeriod, getSettings, preparer, preparerConfigured, voicePrompt } from "@/lib/settings";
 import { prepRules } from "@/lib/skills";
 
@@ -156,9 +157,13 @@ export async function POST(request: Request) {
     );
   }
 
-  let payload: { messages?: unknown };
+  let payload: { messages?: unknown; conversationId?: unknown; startedAt?: unknown };
   try {
-    payload = (await request.json()) as { messages?: unknown };
+    payload = (await request.json()) as {
+      messages?: unknown;
+      conversationId?: unknown;
+      startedAt?: unknown;
+    };
   } catch {
     return NextResponse.json({ error: "The request body must be JSON." }, { status: 400 });
   }
@@ -184,7 +189,35 @@ export async function POST(request: Request) {
       actor: preparer(),
     });
 
-    return NextResponse.json({ reply, trace });
+    /*
+     * Keep the transcript in the person's own Drive folder.
+     *
+     * After the answer is in hand, never before, and never in a way that can
+     * fail it. The answers carry figures somebody will repeat to their
+     * accountant, and when one is later queried the useful question is what
+     * was actually asked and what was actually said — which is unrecoverable
+     * otherwise, because the assistant reasons over a register that keeps
+     * changing. Asking again next week is not the same as knowing what it
+     * said this week.
+     */
+    const period = await activePeriod();
+    const saved = await saveConversation({
+      id: typeof payload.conversationId === "string" ? payload.conversationId : undefined,
+      startedAt: typeof payload.startedAt === "string" ? payload.startedAt : undefined,
+      messages: [...messages, { role: "assistant", content: reply }],
+      period: period.label,
+      entity: period.entity,
+      actor: preparer(),
+    });
+
+    return NextResponse.json({
+      reply,
+      trace,
+      // Reported rather than assumed: a console that always claims the
+      // transcript was kept would be wrong exactly when Drive was unreachable,
+      // which is the one time somebody would want to know.
+      saved: saved ? { filename: saved.filename } : null,
+    });
   } catch (error) {
     const { message, status } = explainModelError(error);
     return NextResponse.json({ error: message }, { status });

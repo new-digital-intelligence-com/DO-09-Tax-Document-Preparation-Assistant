@@ -7,7 +7,7 @@ state this app keeps, so no connector can reach them:
 |---|---|
 | The period register | Drive holds files; it does not hold what was read off them, or which period they belong to |
 | Categorisation with a rationale | A category, a confidence and the sentence explaining it, kept beside a human's override rather than replaced by it |
-| The ledger and the reconciliation | The accounting system's side, and the deterministic pairing against it |
+| The workspace | One shared Drive folder, one subfolder per person, holding every document and the whole register |
 | The exception list | Sixteen kinds of finding, each with figures, a severity, a suggested action and a status |
 | Draft forms | Schedule C, the 1099-NEC summary and the 1040-ES worksheet, computed by arithmetic |
 | Review packages | The assembled pack, its markdown, and who it was handed to |
@@ -21,19 +21,28 @@ rather than answering as though the register had been consulted.
 Check it is up before relying on it: `GET /api/status` returns the period, the
 counts and whether a model is configured.
 
-## Two registers, and which is which
+## One register, two ways in
 
-The app keeps its register in JSON files beside it (`.data/`). This skill, run
-against live connectors, reads Drive and Gmail and records nothing. They are
-separate: a document you read from a Drive folder is not in the app until it is
-ingested there, and a finding the app raised is invisible to a sweep.
+There is no "the app's data" and "your data". The app keeps nothing beside
+itself — no local database, no `.data/` directory — and writes everything to the
+**same shared Google Drive folder** this skill reads:
+`1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`, one subfolder per person. A document
+uploaded in the app is one you can read here; a row you write here is one the
+app shows on its next load.
 
-Say which one an answer came from. If the app is reachable, its API is the
-better path: it writes the record and the audit row in the same step.
+What differs is only the credential. The app reaches that folder with its own
+server-side OAuth client; you reach it with the user's own Drive connector.
+Neither is a substitute for the other and neither sees more than the other.
 
-**Neither Drive nor Gmail is wired into the app in this build.** Its corpus is
-the generated fixture set. `status.sources[]` says so, and `available: false`
-there is an absent connector, not a source with nothing in it.
+**Prefer this API whenever the app is reachable.** It writes the record and the
+audit row in one step and enforces the rules in code rather than in a prompt,
+which is strictly safer than making the same edits by hand. When it is not
+reachable, do the same work through the connector against the same files —
+[workspace.md](workspace.md) has the layout — so the outcome is
+indistinguishable.
+
+Say which route an answer came from when it matters: "read from the register"
+and "opened the file myself just now" are different claims.
 
 ## There is no confirmation password
 
@@ -52,6 +61,7 @@ POST   /api/classify/override      note required — changing a category
 POST   /api/exceptions/resolve     note required — closing or reopening a finding
 DELETE /api/documents/{id}         reason required — removing a document
 POST   /api/packages/handoff       named recipient required, and never the preparer
+POST   /api/packages/send          named recipient required, and never the preparer
 ```
 
 The 400 body says what was expected. It is the design working, not an obstacle:
@@ -82,7 +92,7 @@ curl -s localhost:3000/api/status
   "modelConfigured": true,
   "counts": { "documents": 39, "extracted": 38, "unreadable": 1, "pendingExtraction": 0,
               "classified": 0, "pendingClassification": 38, "needsReview": 0,
-              "ledgerEntries": 38, "matched": 0, "documentOnly": 0, "ledgerOnly": 0 },
+
   "exceptions": { "open": 0, "high": 0, "medium": 0, "low": 0 },
   "money": { "currency": "USD", "grossReceipts": null, "totalExpenses": null,
              "deductibleExpenses": null, "unclassified": null },
@@ -92,8 +102,7 @@ curl -s localhost:3000/api/status
 
 That payload is a period read but not yet categorised, and it is the shape most
 likely to be misreported. `exceptions.open: 0` there does not mean the quarter is
-clean — detection has not run. `matched: 0` does not mean nothing reconciles —
-reconciliation has not run either. Read the counts before the zeros, and say
+clean — detection has not run. Read the counts before the zeros, and say
 which steps have not happened.
 
 Two properties of this payload decide how it must be read:
@@ -232,45 +241,45 @@ curl -s -X POST localhost:3000/api/classify/override \
 | `400` | No note, no such category, or no categorisation on that document to override |
 | `503` | No API key, so nothing can be categorised |
 
-## Ledger
+## Workspaces and the period
 
 ```
-GET    /api/ledger          -> {currency, entries}
-POST   /api/ledger          {csv}
-DELETE /api/ledger          clears the period's entries
+GET  /api/users                 -> {users, active, drive}
+POST /api/users        {name}   create one
+POST /api/users/active {id}     switch to one
+GET  /api/settings/period       -> {period}
+PUT  /api/settings/period       {label?, entity?, start?, end?, currency?, basis?}
 ```
 
-Columns: `date, description, counterparty, amount, currency, account, ref`. The
-import returns `{imported, skipped, problems}` and **`problems` comes back
-populated rather than swallowed** — a row that would not parse is a row of the
-accounts now missing from the reconciliation, and an import reporting "34
-imported" while silently dropping four is how a period reconciles cleanly
-against books it does not match. A file missing a required column is refused
-whole rather than imported in part.
+Every user is a folder under the shared Drive root, read fresh from Drive rather
+than from any local list — so the same workspaces appear on any machine. The
+active one is a cookie, which is why the app has a picker and no sign-in.
 
-```bash
-curl -s -X POST localhost:3000/api/ledger -H 'content-type: application/json' \
-  -d "{\"csv\": $(python3 -c 'import json,sys; print(json.dumps(open("fixtures/ledger-2025-q1.csv").read()))')}"
-```
+`PUT /api/settings/period` changes what the period is **called** and what it
+covers. It never changes the period's id, and neither may you: every document,
+form and package points at it, so a new id detaches the whole corpus. The dates
+constrain nothing — no document is rejected or flagged for falling outside them
+— they are printed on the forms.
 
-Nothing in this app ever writes to a `LedgerEntry`. The import loads it and the
-reconciliation reads it; there is no route that edits one.
-
-## Reconciliation
+## Google, and importing from a person's own Drive
 
 ```
-GET  /api/reconcile   -> {currency, matched[], documentOnly[], ledgerOnly[]}
-POST /api/reconcile   recompute
+GET    /api/google/account        -> {connected, email, can:{driveImport, gmailSend}}
+GET    /api/google/connect        redirect to consent (per person, not the app's own)
+DELETE /api/google/account        disconnect and revoke
+GET    /api/import/drive?q=       -> {files}   search THEIR Drive
+POST   /api/import/drive {fileIds} copy the chosen ones into the workspace
 ```
 
-Deterministic, with no model in it: a pairing a model made up is a pairing
-nobody can check. `POST` returns
-`{matched, documentOnly, ledgerOnly, amountMismatches}` and is safe to run at
-any time.
+Two different Google connections exist and conflating them is a privacy failure.
+The **workspace** connection is the app's own server credential, `drive.file`
+only, owning the shared folder. The **account** connection is per person —
+`drive.readonly` so they can import a file they already have, and `gmail.send`
+so a package can go from their own address. No mailbox-read scope is requested
+anywhere: importing attachments from mail was built and deliberately removed.
 
-A `Match` carries `score`, the `reasons` that made or blocked it, and
-`amountDelta` where the pairing is right and the figures disagree. **The delta is
-never rounded away** — it is the finding.
+Both import routes answer **409**, not 500, when no account is connected or the
+needed permission was not granted. That is a step to take, not a fault.
 
 ## Exceptions
 
@@ -295,7 +304,7 @@ two genuinely different claims about the period:
 curl -s -X POST localhost:3000/api/exceptions/resolve \
   -H 'content-type: application/json' \
   -d '{"id":"exc_7t2","accept":true,
-       "note":"The 18.00 delta is a card fee AWS netted off the payment. Checked against the January statement; the invoice and the ledger are both right."}'
+       "note":"The 18.00 gap is a card fee AWS netted off the payment. Checked against the January statement; both figures on the invoice are right."}'
 ```
 
 | Field | Effect |
@@ -332,9 +341,27 @@ instead.
 ```
 GET  /api/packages              -> {period, packages}
 GET  /api/packages?id=          -> {package, markdown}
+GET  /api/packages/pdf[?id=]    -> application/pdf, DRAFT on every page
 POST /api/packages  {summary?}  assemble
-POST /api/packages/handoff      {packageId, to?, note?}
+POST /api/packages/handoff      {packageId, to?, note?}    records only
+POST /api/packages/send         {packageId, to?, cc?, note?}  emails AND records
 ```
+
+`send` is the only thing anywhere that emails a package, and it exists for this
+skill rather than for the console — the app deliberately has no send button, so
+that a pack leaves by a person who read it rather than by a click on the way
+past. It goes out from the workspace owner's own connected Google account, so
+the recipient can reply to a human; it needs `gmail.send` on that connection and
+returns **409** with a plain reason when there is none.
+
+Sending and recording the handoff are one act. The mail goes first, because that
+is the part that can fail for reasons outside this app, and the handoff is
+written only once it has actually gone — a register claiming a review is under
+way that nobody was told about is the failure this ordering prevents.
+
+Confirm the recipient with the person before calling it. Never call it to check
+that it works: there is no draft mode, and the tax manager receives whatever you
+send.
 
 Assembly **regenerates all three drafts first**, so a package can never carry a
 form that predates the categorisation behind it. A stale figure in a pack
@@ -345,7 +372,7 @@ curl -s -X POST localhost:3000/api/packages -H 'content-type: application/json' 
 curl -s -X POST localhost:3000/api/packages/handoff \
   -H 'content-type: application/json' \
   -d '{"packageId":"pkg_9d1","to":"dana.whitfield@new-digital-intelligence.com",
-       "note":"2025 Q1 for review. Nine items still open, four of them high — the backdated Bright Anvil invoice is the one to look at first."}'
+       "note":"2025 Q1 for review. Nine items still open, four of them high — the Northgate invoice whose lines do not add up to its total is the one to look at first."}'
 ```
 
 The handoff **sends no mail and files nothing.** It records who the pack went to
@@ -367,10 +394,15 @@ substring, so `exception` covers `exception.detect`, `exception.resolve`,
 `exception.retired` in one filter. Newest first — an order that is a property of
 how the trail is written rather than a sort applied on read — default limit 200.
 
-The families: `document.*` (ingest, duplicate-detected, delete), `extract.*`,
-`classify.*` (run, override, error, partial-batch), `ledger.*` (import, clear),
-`reconcile.run`, `exception.*`, `form.generate`, `package.assemble` and
-`package.handoff`.
+The families: `document.*` (ingest, reused, declined, delete, cache.cleared),
+`extract.*`, `classify.*` (run, override, error, partial-batch), `exception.*`,
+`form.generate`, `period.updated`, `google.*` (connected, disconnected), and
+`package.*` (assemble, handoff, emailed, downloaded).
+
+The trail is also the **only** place a deleted document survives. Search it by
+filename before telling anybody no record of something exists — "it was never
+here" and "it was deleted on Tuesday, with a reason" are different answers and
+usually only one of them is true.
 
 ```bash
 curl -s "localhost:3000/api/audit?action=exception&limit=50"
@@ -386,13 +418,16 @@ POST /api/chat     {messages}                -> {reply, trace}
 POST /api/assist   {kind, …}                 -> {text}
 ```
 
-`/api/chat` runs the app's own agent over ten read-only tools — `period_status`,
+`/api/chat` runs the app's own agent over nine read-only tools — `period_status`,
 `list_documents`, `get_document`, `search_documents`, `list_categories`,
-`category_totals`, `list_exceptions`, `reconciliation`, `list_ledger`,
-`get_form_draft`. There is no `resolve_exception`, no `override_category`, no
-`edit_ledger`, no `assemble_package`, no `hand_off` and no `file_return`. Those
-absences are the agent's authority, and an instruction is a request where a
-missing tool is a fact.
+`category_totals`, `list_exceptions`, `list_audit`, `get_form_draft`. There is no
+`resolve_exception`, no `override_category`, no `assemble_package`, no `hand_off`
+and no `file_return`. Those absences are the agent's authority, and an
+instruction is a request where a missing tool is a fact.
+
+Each reply is saved to `conversations/` in the workspace folder as Markdown, so
+a figure quoted to an accountant can be traced back to the question that
+produced it.
 
 `/api/assist` drafts prose and changes nothing. `kind` is one of
 `package-summary`, `exception-note`, `vendor-request`, `handoff-note`. A thin
@@ -403,7 +438,7 @@ invents a reason closes a finding on grounds nobody ever offered.
 curl -s -X POST localhost:3000/api/assist -H 'content-type: application/json' \
   -d '{"kind":"vendor-request","vendor":"Amazon Web Services",
        "entity":"Northwind Studio LLC","sendTo":"accounts@northwind.studio",
-       "items":[{"date":"2025-03-31","amount":2190.44,"currency":"USD","note":"on the ledger, no invoice collected"}]}'
+       "items":[{"date":"2025-03-31","amount":2190.44,"currency":"USD","note":"billed either side of this month, nothing on file for March"}]}'
 ```
 
 Both return **503** when `ANTHROPIC_API_KEY` is not set. That is a state to

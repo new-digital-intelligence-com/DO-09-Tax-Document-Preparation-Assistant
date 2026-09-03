@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Icon } from "@/components/icons";
 import { Markdown } from "@/components/Markdown";
 import {
   Badge,
@@ -36,11 +37,11 @@ import type { ReviewPackage } from "@/lib/types";
  * and when, because "it was handed over" with nobody against it is the state
  * where everyone assumes somebody else has it.
  *
- * Where a Google account is connected, the pack can go by email from that
- * person's own address rather than from a robot — and the send and the record
- * are one act, so the register can never say a review is under way that nobody
- * was actually told about. Without a connected account it still records the
- * handoff and hands back the text to send by hand.
+ * Nothing is emailed from this screen, deliberately. Sending exists — the
+ * `POST /api/packages/send` route is real and the Claude skill uses it — but
+ * putting it behind a button here makes a send the path of least resistance,
+ * and a package is not a thing to fire off with one click on the way past.
+ * From here the pack is downloaded or copied and sent by a person who read it.
  */
 export function PackagePanel() {
   const [pkg, setPkg] = useState<ReviewPackage | null>(null);
@@ -51,11 +52,6 @@ export function PackagePanel() {
   const [summary, setSummary] = useState("");
   const [handing, setHanding] = useState(false);
   const [recipient, setRecipient] = useState("");
-  const [account, setAccount] = useState<{
-    connected: boolean;
-    email?: string;
-    can: { gmailSend: boolean };
-  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -74,15 +70,6 @@ export function PackagePanel() {
       setError(cause instanceof Error ? cause.message : "The packages could not be read.");
     }
 
-    // Whether the pack can be emailed from here. A failure to answer means it
-    // cannot, which is the safe reading — the button then records the handoff
-    // and says plainly that nothing was sent.
-    try {
-      const response = await fetch("/api/google/account");
-      if (response.ok) setAccount(await response.json());
-    } catch {
-      setAccount(null);
-    }
   }, []);
 
   useEffect(() => {
@@ -136,24 +123,18 @@ export function PackagePanel() {
   }
 
   /**
-   * Hand the pack over — by email where that is possible, by record where it
-   * is not.
+   * Record that the pack is now somebody else's.
    *
-   * The two are one button rather than two, because from the preparer's side
-   * they are one decision: this pack is finished and it is now somebody
-   * else's. Whether it travels by Gmail or by copy-and-paste is a fact about
-   * the connection, not a choice worth making them make. What changes is only
-   * what the console says happened afterwards, and that has to be exact — a
-   * person told "sent" whose mail never went is worse off than one told to
-   * send it themselves.
+   * It records; it does not send. "It was handed over" with nobody against it
+   * is the state where everyone assumes somebody else has it, so the name and
+   * the moment are written down — and then a person sends the PDF themselves,
+   * having read it.
    */
   async function handOff(handoffNote: string) {
     if (!pkg) return;
-    const canSend = Boolean(account?.connected && account.can.gmailSend);
-
     setBusy("handoff");
     try {
-      const response = await fetch(canSend ? "/api/packages/send" : "/api/packages/handoff", {
+      const response = await fetch("/api/packages/handoff", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -166,10 +147,8 @@ export function PackagePanel() {
       if (!response.ok) throw new Error(value?.error ?? `Handoff responded ${response.status}.`);
       setHanding(false);
       setNote(
-        canSend
-          ? (value.note ?? `Sent to ${value.to}, and the handoff is recorded.`)
-          : "Recorded as handed off. No mail was sent — connect a Google account to send it from " +
-              "here, or copy the package below and send it yourself.",
+        `Recorded as handed to ${value.period?.handedOffTo ?? (recipient.trim() || "the reviewer")}. ` +
+          "Nothing was emailed — download the PDF and send it yourself.",
       );
       await load();
     } catch (cause) {
@@ -248,6 +227,20 @@ export function PackagePanel() {
             Draft the summary
           </Button>
           <CopyButton label="Copy the pack" text={markdown} size="md" />
+          {/* An anchor, not a fetch. The browser's own viewer is where a person
+              reads a PDF before deciding to send it, and a blob built in
+              JavaScript would only get in the way of that. */}
+          {markdown && (
+            <a
+              href={pkg ? `/api/packages/pdf?id=${pkg.id}` : "/api/packages/pdf"}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-medium text-ink-2 transition hover:border-border-strong hover:text-ink"
+            >
+              <Icon name="download" className="size-3.5" />
+              Download PDF
+            </a>
+          )}
           {assembleButton}
           <Button
             variant="brand"
@@ -255,9 +248,7 @@ export function PackagePanel() {
             disabled={!markdown}
             onClick={() => setHanding(true)}
           >
-            {account?.connected && account.can.gmailSend
-              ? "Email it to the tax manager"
-              : "Hand to the tax manager"}
+            Hand to the tax manager
           </Button>
         </Toolbar>
 
@@ -285,25 +276,16 @@ export function PackagePanel() {
 
       <Confirm
         open={handing}
-        title={
-          account?.connected && account.can.gmailSend
-            ? "Email this package to a person"
-            : "Hand this package to a person"
-        }
+        title="Hand this package to a person"
         consequence={
-          (account?.connected && account.can.gmailSend
-            ? `The whole pack is emailed to the address below from ${account.email ?? "your connected account"}, ` +
-              `and the period is marked handed off. It is marked DRAFT throughout and nothing is filed. `
-            : `The pack is recorded as handed to the address below, and the period is marked handed off. ` +
-              `Nothing is filed and no mail is sent — connect a Google account to send from here — so ` +
-              `you will copy the pack and send it yourself. `) +
+          `The pack is recorded as handed to the address below, and the period is marked handed ` +
+          `off. Nothing is filed and nothing is emailed from here — download the PDF and send it ` +
+          `yourself. ` +
           (c.openExceptions > 0
             ? `${c.openExceptions} items are still open; they go across with the pack and the reviewer will have to decide them.`
             : `Nothing is outstanding, but every form in the pack is still a draft awaiting their review.`)
         }
-        confirmLabel={
-          account?.connected && account.can.gmailSend ? "Send it" : "Record the handoff"
-        }
+        confirmLabel="Record the handoff"
         variant="brand"
         requireNote
         notePlaceholder="Anything the reviewer should know before they open it."

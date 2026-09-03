@@ -32,7 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Pdf } from "./lib/pdf-lite.mjs";
+import { Pdf } from "../src/lib/pdf-lite.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "fixtures");
