@@ -19,20 +19,55 @@ import type { FilingPeriod, Settings } from "./types";
  */
 
 /**
- * The period this build ships with.
+ * The period a fresh workspace starts on.
  *
  * A period carries its own entity, start, end, basis and currency rather than
  * reading them from `Settings` at display time: renaming the entity or moving
  * to accrual next year must not silently rewrite a quarter that was already
  * packaged and handed off. What a period was prepared under is a fact about
  * that period.
+ *
+ * The label and dates are derived from today rather than written down, because
+ * a hard-coded quarter is wrong for everybody who did not happen to install
+ * during it. This build shipped with "2025 Q1" and a fixture entity, and a
+ * person collecting their own 2026 invoices was shown a heading from a
+ * different year with somebody else's company name under it.
+ *
+ * The **id is deliberately fixed** and does not follow the date. Every
+ * document, form and package on the register is attached to a period by id, so
+ * an id that changed with the calendar would detach a whole workspace's
+ * documents from the period they belong to on the first day of a new quarter.
+ * The label is what people read; the id is what the data hangs from, and only
+ * one of those is allowed to move.
  */
-const Q1_2025: FilingPeriod = {
-  id: "period_2025_q1",
-  label: "2025 Q1",
-  entity: "Northwind Studio LLC",
-  start: "2025-01-01",
-  end: "2025-03-31",
+const PERIOD_ID = "period_2025_q1";
+
+function currentQuarter(now = new Date()): { label: string; start: string; end: string } {
+  const year = now.getUTCFullYear();
+  const quarter = Math.floor(now.getUTCMonth() / 3) + 1;
+  const firstMonth = (quarter - 1) * 3;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lastDay = new Date(Date.UTC(year, firstMonth + 3, 0)).getUTCDate();
+  return {
+    label: `${year} Q${quarter}`,
+    start: `${year}-${pad(firstMonth + 1)}-01`,
+    end: `${year}-${pad(firstMonth + 3)}-${pad(lastDay)}`,
+  };
+}
+
+/**
+ * The stand-in entity name.
+ *
+ * Exported so the console can tell a name somebody chose from one nobody has
+ * chosen yet — the same distinction `preparerConfigured` draws. A draft form
+ * headed with a placeholder company should say it is a placeholder.
+ */
+export const UNSET_ENTITY = "Entity not set";
+
+const STARTING_PERIOD: FilingPeriod = {
+  id: PERIOD_ID,
+  ...currentQuarter(),
+  entity: UNSET_ENTITY,
   jurisdiction: "US-federal",
   basis: "cash",
   currency: "USD",
@@ -40,12 +75,12 @@ const Q1_2025: FilingPeriod = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  entity: "Northwind Studio LLC",
+  entity: UNSET_ENTITY,
   jurisdiction: "US-federal",
   currency: "USD",
   basis: "cash",
-  activePeriodId: Q1_2025.id,
-  periods: [Q1_2025],
+  activePeriodId: STARTING_PERIOD.id,
+  periods: [STARTING_PERIOD],
   /**
    * Stand-in addresses, not real people. `preparerConfigured()` and
    * `taxManagerConfigured()` are how the console tells an operator that the
@@ -173,7 +208,7 @@ export async function activePeriod(): Promise<FilingPeriod> {
   return (
     settings.periods.find((period) => period.id === settings.activePeriodId) ??
     settings.periods[0] ??
-    Q1_2025
+    STARTING_PERIOD
   );
 }
 
@@ -289,4 +324,71 @@ export function money(amount: number, currency: string): string {
   } catch {
     return `${code} ${amount.toFixed(2)}`;
   }
+}
+
+/**
+ * Change the active period's own details, keeping its id.
+ *
+ * The id never moves, and that is the whole safety of this function. Every
+ * document, extraction, form draft and package on the register points at a
+ * period by id; letting a rename mint a new one would leave a workspace's
+ * entire corpus attached to a period that no longer exists, and every screen
+ * would report an empty quarter rather than an error. So the label, the
+ * entity, the dates, the basis and the currency are all editable and the key
+ * is not.
+ *
+ * The workspace-level `entity` and `currency` follow the period when they are
+ * changed here. They are the defaults a *new* period would be created with, and
+ * leaving them pointing at the old company while the period says otherwise is
+ * a disagreement nobody would think to look for.
+ *
+ * A period already handed off is still editable. Correcting a misspelled
+ * company name after the fact is a legitimate thing to want, and the audit
+ * trail is what records that it happened — refusing the edit would only push
+ * somebody into editing the JSON on Drive by hand, where nothing is recorded
+ * at all.
+ */
+export async function savePeriod(patch: Partial<FilingPeriod>): Promise<FilingPeriod> {
+  const settings = await getSettings();
+  const active = await activePeriod();
+
+  const trimmed = (value: unknown, fallback: string) =>
+    typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+  const next: FilingPeriod = {
+    ...active,
+    id: active.id,
+    label: trimmed(patch.label, active.label),
+    entity: trimmed(patch.entity, active.entity),
+    start: isDate(patch.start) ? patch.start : active.start,
+    end: isDate(patch.end) ? patch.end : active.end,
+    currency: trimmed(patch.currency, active.currency).toUpperCase(),
+    basis: patch.basis === "cash" || patch.basis === "accrual" ? patch.basis : active.basis,
+    jurisdiction: trimmed(patch.jurisdiction, active.jurisdiction),
+  };
+
+  if (next.end < next.start) {
+    throw new Error(
+      `The period ends (${next.end}) before it starts (${next.start}). ` +
+        "Nothing rejects a document for falling outside these dates, but they are printed on every " +
+        "draft form, and a form headed with a backwards period is one a reviewer has to query.",
+    );
+  }
+
+  await saveSettings({
+    entity: next.entity,
+    currency: next.currency,
+    basis: next.basis,
+    jurisdiction: next.jurisdiction,
+    periods: settings.periods.map((period) => (period.id === next.id ? next : period)),
+  });
+
+  return next;
+}
+
+/** `YYYY-MM-DD`, and a real date rather than merely the right shape. */
+function isDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }

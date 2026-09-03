@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/shell";
+import { PeriodEditor } from "@/components/PeriodEditor";
 import { ErrorNote } from "@/components/ui";
 import { OverviewPanel } from "@/components/panels/OverviewPanel";
 import { DocumentsPanel } from "@/components/panels/DocumentsPanel";
@@ -71,6 +72,7 @@ export default function PrepPage() {
   const [status, setStatus] = useState<PrepStatus | null>(null);
   const [user, setUser] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [error, setError] = useState("");
+  const [editingPeriod, setEditingPeriod] = useState(false);
 
   // Read the section from the URL on mount and on back/forward, so a linked
   // screen opens on the screen that was linked.
@@ -143,10 +145,10 @@ export default function PrepPage() {
     <AppShell
       active={section}
       counts={counts}
-      period={status?.period.label}
-      entity={status?.period.entity}
+      period={status?.period}
       user={user ?? undefined}
       onNavigate={navigate}
+      onEditPeriod={status ? () => setEditingPeriod(true) : undefined}
     >
       <PageHeader title={heading.title} description={heading.description} />
       {error && (
@@ -157,6 +159,17 @@ export default function PrepPage() {
         </div>
       )}
       <Panel />
+
+      {status && (
+        <PeriodEditor
+          open={editingPeriod}
+          period={status.period}
+          onClose={() => setEditingPeriod(false)}
+          /* Everything on screen is labelled with the period, so a rename has
+             to reach the whole page rather than just the sidebar. */
+          onSaved={() => window.location.reload()}
+        />
+      )}
     </AppShell>
   );
 }

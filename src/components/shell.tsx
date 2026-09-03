@@ -339,16 +339,24 @@ export function AppShell({
   active,
   counts = {},
   period,
-  entity,
   user,
   onNavigate,
+  onEditPeriod,
 }: {
   children: React.ReactNode;
   active: string;
   counts?: Partial<Record<string, number>>;
-  /** e.g. "2025 Q1". Absent renders as "no period loaded", never as a guess. */
-  period?: string;
-  entity?: string;
+  /** The active period. Absent renders as "no period loaded", never as a guess. */
+  period?: {
+    label: string;
+    entity: string;
+    start: string;
+    end: string;
+    currency: string;
+    basis: "cash" | "accrual";
+  };
+  /** Opens the period editor. Absent leaves the period block read-only. */
+  onEditPeriod?: () => void;
   /** Whose workspace this is. Always visible: it scopes everything on screen. */
   user?: { id: string; name: string };
   onNavigate?: (id: string) => void;
@@ -419,8 +427,34 @@ export function AppShell({
                 <span className="ml-auto text-ink-3">↔</span>
               </a>
             )}
-            <p className="text-[12px] font-medium">{period ?? "No period loaded"}</p>
-            <p className="mt-0.5 truncate text-[11.5px] text-ink-3">{entity ?? "—"}</p>
+            {/* The period is editable from here because here is where it is
+                read. It shipped as a guess — a quarter from a past year under a
+                fixture company name — and a label somebody cannot correct
+                where they see it is one they end up ignoring. */}
+            {period && onEditPeriod ? (
+              <button
+                type="button"
+                onClick={onEditPeriod}
+                title="Edit the filing period"
+                className="group block w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-sunken"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[12px] font-medium">{period.label}</span>
+                  <Icon
+                    name="chevron"
+                    className="size-3 text-ink-3 opacity-0 transition group-hover:opacity-100"
+                  />
+                </span>
+                <span className="mt-0.5 block truncate text-[11.5px] text-ink-3">
+                  {period.entity}
+                </span>
+              </button>
+            ) : (
+              <>
+                <p className="text-[12px] font-medium">{period?.label ?? "No period loaded"}</p>
+                <p className="mt-0.5 truncate text-[11.5px] text-ink-3">{period?.entity ?? "—"}</p>
+              </>
+            )}
             <p className="mt-2 flex items-center gap-1 text-[11px] text-ink-3">
               <Icon name="command" className="size-3" />
               <span>K to search</span>
