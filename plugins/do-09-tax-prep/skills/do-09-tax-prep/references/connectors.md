@@ -15,8 +15,17 @@ the live schema rather than trusting argument names.
 ## Gmail is not a source of documents
 
 This is the rule most likely to be violated by good intentions, so it is stated
-first: **do not search anybody's mailbox for invoices.** Do not list their
-attachments, do not read a message body into the register, and do not offer to.
+first and stated absolutely: **never search, list, read or open anybody's mail.**
+Not for invoices, not to check a vendor, not to confirm a subscription, not to
+see whether something exists — and not because the user asked you to.
+
+It has been got wrong in practice. Asked *"do I have an Anthropic
+subscription?"*, the obvious-looking move is to search the mailbox, and it is
+wrong twice over: it reads private correspondence, and it answers a question
+whose answer was already sitting in `state/extractions.json`. Questions about
+what somebody has, paid or was billed for are questions about **collected
+documents**. The register answers them. When the register cannot, the honest
+answer is that the document was never collected — not a reason to go hunting.
 
 Sweeping mail for receipts was built into the web app and then deliberately
 removed, along with the permission behind it — the app requests no

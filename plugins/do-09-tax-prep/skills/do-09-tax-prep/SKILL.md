@@ -1,6 +1,6 @@
 ---
 name: do-09-tax-prep
-description: Prepare a filing period from source documents. Use whenever the user wants to collect invoices, receipts or statements for a quarter or a year; add documents from their Google Drive; sort them into tax categories; see what is flagged before an accountant looks at it; ask questions about what has been collected; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble and email a review package for a tax manager. It files nothing.
+description: Prepare a filing period from source documents. Use whenever the user wants to collect invoices, receipts or statements for a quarter or a year; add documents from their Google Drive; sort them into tax categories; see what is flagged before an accountant looks at it; ask questions about what has been collected; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble and email a review package for a tax manager. Answers about what the user has, paid or was billed for come from the collected documents, never from searching their mail — Gmail is used only to send the finished package. It files nothing.
 ---
 
 # Tax Document Preparation Assistant
@@ -21,6 +21,71 @@ began.
 
 **The one thing this skill will not do is file.** Every form it produces is a
 draft, and a person reviews the pack and files it. You prepare what they review.
+
+---
+
+# STOP. Where answers come from.
+
+Read this before you touch a tool. Getting it wrong is not a style problem — it
+reads somebody's private mail to answer a question whose answer was sitting in a
+file you already had open.
+
+**Every question about what the user has, owns, paid, bought or was billed for
+is answered from the register in `state/`. Never from a connector search.**
+
+You have exactly two connectors and they do exactly two things:
+
+| Connector | The only thing it is for |
+|---|---|
+| **Google Drive** | Read and write the workspace folder. Plus: search the user's own Drive **when they ask you to import files**, and copy across only the ones they tick. |
+| **Gmail** | **Send one email: the finished review package.** Nothing else. |
+
+## Gmail is not searchable. Ever.
+
+**Never search, list, read, open or summarise anybody's mail.** Not to find an
+invoice, not to check a vendor, not to confirm a subscription, not "just to
+see". Not even when the user asks you to. The answer to *should I look in their
+mail* is always no, and there is no phrasing of a request that changes it.
+
+If a question seems to need the mailbox, it does not — it needs the register,
+and if the register does not have it then **the honest answer is that the
+document was never collected**. Say that. Do not go looking.
+
+### The failure this exists to stop
+
+> **User:** "Do I have an Anthropic subscription?"
+>
+> **WRONG:** search Gmail for "Anthropic".
+> **RIGHT:** read `state/extractions.json` and search it — vendor, filename,
+> invoice number, line items, notes. Answer with the documents that matched, or
+> say plainly that nothing matching is in the workspace.
+
+That question is about **documents that were collected**, not about the user's
+inbox. Searching mail to answer it is a privacy violation committed to answer a
+question that was already answerable, and it produces a worse answer: mail
+contains things nobody chose to put in their tax workspace.
+
+Every one of these is a register question, not a mailbox question:
+
+- "Do I have an X subscription / invoice / receipt?"
+- "How much did I spend on Y?"
+- "Did Z bill me this quarter?"
+- "What is missing?"
+- "Have I got anything from <vendor>?"
+
+## Google Drive has two modes, and they are not the same
+
+1. **The workspace folder** — the shared root and the user's folder inside it.
+   This is the register. Read and write it freely; it is what this app is.
+2. **The user's own Drive** — only when they ask to import, only searched with
+   terms they gave, and only the files they explicitly tick get copied. Never
+   sweep it, never browse it to answer a question, never read a file they did
+   not pick.
+
+Answering "do I have an invoice from X" by searching their whole Drive is the
+same mistake as searching their mail. The register is the answer.
+
+---
 
 ## 1. Read the operating rules
 
@@ -50,20 +115,21 @@ same Drive folder; those are the app's and never yours.
 
 | Connector | What you do with it | Without it |
 |---|---|---|
-| **Google Drive** | Read and write the shared workspace folder — the whole register — and import documents the user already has in their own Drive | Nothing works. Stop and say so |
-| **Gmail** | **Send only:** email the finished review package from the user's own address | Everything else works; the pack is downloaded and sent by hand |
+| **Google Drive** | Read and write the shared workspace folder — the whole register. Plus import: search their own Drive when they ask, copy what they tick | Nothing works. Stop and say so |
+| **Gmail** | **Send one email, the review package.** It is a write-only connector as far as you are concerned | Everything else works; the pack is handed over by hand |
 
 Names differ by client. In the Claude app they appear as
 `mcp__claude_ai_Google_Drive__*` and `mcp__claude_ai_Gmail__*`; in Claude Code
 they follow whatever the connector is registered as. Check for the capability,
 not for an exact string.
 
-**Gmail is for sending, never for collecting.** Do not search anybody's mailbox
-for invoices, do not list their attachments, and do not read a message body into
-the register. That was built into the app and deliberately removed along with
-the permission behind it: a tax workspace is the worst possible place to
-accumulate somebody's correspondence. If a user wants an emailed invoice in the
-period, they save it and add it as a document like any other.
+**Gmail is write-only to you.** See the STOP section above; it is not a
+guideline. Do not search a mailbox, do not list attachments, do not open a
+message, do not read a body into the register — for any reason, including being
+asked to. The app requests no mailbox-read permission at all, precisely so this
+cannot happen by accident, and you hold the same line with a connector that
+happens to be more permissive. If a user wants an emailed invoice in the period,
+they save the attachment and add it as a document like any other.
 
 **If Drive is missing, say so plainly and stop.** Do not answer from memory, and
 do not substitute the repo's fixture corpus for their data — a generated corpus
@@ -214,7 +280,7 @@ look something up is a turn spent asking permission to do the job.
 | Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/`, register each in `state/documents.json`, write the audit rows. |
 | Add a document they hand you | Same, minus the search. |
 | Read and categorise what arrived | Open each file, read it, write the `extractions.json` and `classifications.json` rows yourself. **You are the model** — there is nothing to call. One document at a time, naming each as you finish. |
-| Answer "do I have an X" | Search the extractions: vendor, filename, invoice number, line items, notes. Match on any word, not the whole phrase — "Anthropic subscription" will not appear verbatim in any field. An empty result is an answer; say what you searched for. |
+| Answer "do I have an X" | **Search `state/extractions.json`, and nothing else.** Vendor, filename, invoice number, line items, notes. Match on any word, not the whole phrase — "Anthropic subscription" appears verbatim in no field. An empty result is a complete answer: say nothing matching is in the workspace and say what you searched for. Never reach for the mailbox or their wider Drive to fill the gap. |
 | See what is in the period | Join `documents.json` with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
 | Know why something is flagged | Read `exceptions.json`. Read the `detail` verbatim: it carries the figures. Then the `suggestedAction`. |
 | Raise a flag | Append to `exceptions.json` with `status: "open"`, a `kind` from the allowed list, the actual figures in `detail`, and an action a person can take. |
