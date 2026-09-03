@@ -1,14 +1,51 @@
 import { ingest } from "@/lib/documents";
-import { personalFileMeta, readPersonalFile, searchPersonalDrive } from "@/lib/google-account";
+import {
+  accountConnection,
+  personalFileMeta,
+  readPersonalFile,
+  searchPersonalDrive,
+} from "@/lib/google-account";
 import { activePeriod, preparer } from "@/lib/settings";
 import { bad, body, failed, ok } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+/**
+ * Refuse with a status the caller can act on.
+ *
+ * "No account is connected" and "Drive threw" are both failures, but only one
+ * of them is this app's fault and only one of them the person can fix. A 500
+ * for the first tells the console something broke, when what actually happened
+ * is that a step has not been taken yet — so the dialog would show an error
+ * where it should be showing a Connect button.
+ */
+async function unconnected() {
+  const connection = await accountConnection();
+  if (connection.blocked) return bad(connection.blocked, 409);
+  if (!connection.connected) {
+    return bad(
+      "No Google account is connected to this workspace. Connect one from Add documents — only " +
+        "the Drive files you pick are ever read.",
+      409,
+    );
+  }
+  if (!connection.can.driveImport) {
+    return bad(
+      `${connection.email ?? "That account"} is connected but was not granted permission to read ` +
+        "its Drive. Connect again and approve file access.",
+      409,
+    );
+  }
+  return null;
+}
+
 /** What is in the connected person's own Drive that could be imported. */
 export async function GET(request: Request) {
   try {
+    const refusal = await unconnected();
+    if (refusal) return refusal;
+
     const query = new URL(request.url).searchParams.get("q") ?? "";
     return ok({ files: await searchPersonalDrive(query) });
   } catch (error) {
@@ -31,6 +68,9 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
+    const refusal = await unconnected();
+    if (refusal) return refusal;
+
     const payload = await body(request);
     const ids = Array.isArray(payload.fileIds) ? payload.fileIds.filter((v): v is string => typeof v === "string") : [];
     if (ids.length === 0) return bad("Send fileIds: an array of Drive file ids to import.");

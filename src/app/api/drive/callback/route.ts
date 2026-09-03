@@ -92,7 +92,6 @@ export async function GET(request: Request) {
       const connection = await connectAccount(code);
       const granted = [
         connection.can.driveImport ? "their Drive" : "",
-        connection.can.gmailImport ? "their mail" : "",
         connection.can.gmailSend ? "sending on their behalf" : "",
       ].filter(Boolean);
 
@@ -117,8 +116,8 @@ export async function GET(request: Request) {
           (granted.length > 0
             ? `<p>You granted access to ${granted.join(", ")}. Only this account is read, and only ` +
               `the files you pick are imported.</p>`
-            : `<p>No usable permission was granted, so nothing can be imported yet. Connect again ` +
-              `and approve Drive or Gmail access.</p>`) +
+            : `<p>No usable permission was granted, so nothing can be imported or sent yet. ` +
+              `Connect again and approve access.</p>`) +
           `<p>Nothing needs restarting — this works immediately.</p>`,
         granted.length > 0 ? "ok" : "bad",
       );

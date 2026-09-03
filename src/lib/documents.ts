@@ -517,13 +517,15 @@ export async function documentViews(periodId: string): Promise<DocumentView[]> {
 /**
  * What each collection source returned, and whether it was asked.
  *
- * `available: false` is the whole point of this function for a source that has
- * genuinely not been swept. Gmail is not wired into this build: no search has
- * run against it, so the number of documents in it is *unknown*. Reporting
- * that as `documents: 0` would put a zero on the console that reads as "there
- * is nothing there" — zero rows from a sweep nobody ran is not "no documents".
- * Drive, by contrast, IS wired in and swept for real, so it is reported as
- * available with a genuine count.
+ * `available: false` is the whole point of this function for a source nothing
+ * has ever asked. Gmail is not one of this app's sources and is not going to
+ * be: reading a mailbox was built and then deliberately removed, along with
+ * the permission behind it. So the number of documents in anybody's mail is
+ * *unknown*, and reporting it as `documents: 0` would put a zero on the
+ * console that reads as "there is nothing there" — a claim this app has no
+ * standing to make about a mailbox it cannot open.
+ *
+ * Drive, by contrast, is swept for real and reported with a genuine count.
  */
 export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sources"]> {
   const docs = await listDocuments({ periodId });
@@ -567,9 +569,9 @@ export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sou
       available: false,
       documents: gmail,
       detail:
-        "Gmail is not wired into this build, so no search has run and the figure is unknown " +
-        "rather than zero." +
-        (process.env.GMAIL_QUERY?.trim() ? " GMAIL_QUERY is set, but a query is not a search." : "") +
+        "This app does not read anybody's mail — the permission is not requested — so no search " +
+        "has run and the figure is unknown rather than zero. An emailed invoice is added by " +
+        "saving it and using Add documents." +
         (gmail > 0
           ? ` ${gmail} row(s) in this period are labelled gmail; they were placed by the fixture ` +
             "generator, not collected by a sweep."

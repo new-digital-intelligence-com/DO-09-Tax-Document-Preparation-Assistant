@@ -18,24 +18,22 @@ import {
 /**
  * Where documents come from.
  *
- * Three sources behind one button, because from the preparer's side they are
- * one act: get the invoice into the workspace. The file on their laptop, the
- * one already in their Drive and the one attached to an email from the vendor
- * are the same document arriving by different roads, and making somebody
- * download from Gmail to their desktop so they can upload it again is work the
- * app should be doing.
+ * Two sources behind one button, because from the preparer's side they are one
+ * act: get the invoice into the workspace. The file on their laptop and the
+ * one already sitting in their Drive are the same document arriving by a
+ * different road.
  *
- * The Google sources read the account of whoever is using this workspace — not
- * the app owner's. Each person connects their own, and nothing is imported but
- * the files they tick.
+ * Drive reads the account of whoever is using this workspace, not the app
+ * owner's. Each person connects their own, and nothing is imported but the
+ * files they tick.
  */
 
-type Tab = "upload" | "drive" | "gmail";
+type Tab = "upload" | "drive";
 
 type Connection = {
   connected: boolean;
   email?: string;
-  can: { driveImport: boolean; gmailImport: boolean; gmailSend: boolean };
+  can: { driveImport: boolean; gmailSend: boolean };
   blocked?: string;
 };
 
@@ -46,17 +44,6 @@ type DriveFile = {
   bytes?: number;
   modifiedTime?: string;
   from?: string;
-};
-
-type MailAttachment = {
-  messageId: string;
-  attachmentId: string;
-  filename: string;
-  mimeType: string;
-  bytes: number;
-  subject: string;
-  from: string;
-  date?: string;
 };
 
 export function AddDocuments({
@@ -79,7 +66,6 @@ export function AddDocuments({
 
   const [query, setQuery] = useState("");
   const [driveFiles, setDriveFiles] = useState<DriveFile[] | null>(null);
-  const [mail, setMail] = useState<MailAttachment[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const loadConnection = useCallback(async () => {
@@ -104,10 +90,9 @@ export function AddDocuments({
   }
   if (!open && asked) setAsked(false);
 
-  // A new tab starts with nothing picked. Carrying a selection across sources
-  // would let somebody import a Drive file they chose while looking at mail.
-  // Adjusted during render rather than in an effect: an effect would paint the
-  // old tab's selection for a frame before clearing it.
+  // A new tab starts with nothing picked. Adjusted during render rather than
+  // in an effect: an effect would paint the old tab's selection for a frame
+  // before clearing it.
   const [lastTab, setLastTab] = useState<Tab>(tab);
   if (tab !== lastTab) {
     setLastTab(tab);
@@ -119,12 +104,10 @@ export function AddDocuments({
     setBusy(true);
     setError("");
     try {
-      const path = tab === "drive" ? "/api/import/drive" : "/api/import/gmail";
-      const response = await fetch(`${path}?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/import/drive?q=${encodeURIComponent(query)}`);
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error ?? `Search responded ${response.status}.`);
-      if (tab === "drive") setDriveFiles(value.files ?? []);
-      else setMail(value.attachments ?? []);
+      setDriveFiles(value.files ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The search failed.");
     } finally {
@@ -136,20 +119,11 @@ export function AddDocuments({
     setBusy(true);
     setError("");
     try {
-      const response =
-        tab === "drive"
-          ? await fetch("/api/import/drive", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ fileIds: Array.from(picked) }),
-            })
-          : await fetch("/api/import/gmail", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                attachments: (mail ?? []).filter((row) => picked.has(keyOf(row))),
-              }),
-            });
+      const response = await fetch("/api/import/drive", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileIds: Array.from(picked) }),
+      });
 
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error ?? `Import responded ${response.status}.`);
@@ -168,13 +142,8 @@ export function AddDocuments({
     }
   }
 
-  const needsConnection = tab !== "upload" && !connection?.connected;
-  const missingScope =
-    tab === "drive"
-      ? connection?.connected && !connection.can.driveImport
-      : tab === "gmail"
-        ? connection?.connected && !connection.can.gmailImport
-        : false;
+  const needsConnection = tab === "drive" && !connection?.connected;
+  const missingScope = tab === "drive" && connection?.connected && !connection.can.driveImport;
 
   return (
     <Dialog
@@ -183,7 +152,7 @@ export function AddDocuments({
       onClose={onClose}
       width="max-w-2xl"
       footer={
-        tab !== "upload" && (
+        tab === "drive" && (
           <>
             <span className="mr-auto text-[12px] text-ink-3">
               {picked.size > 0
@@ -209,7 +178,6 @@ export function AddDocuments({
         tabs={[
           { id: "upload" as Tab, label: "This computer" },
           { id: "drive" as Tab, label: "Google Drive" },
-          { id: "gmail" as Tab, label: "Gmail" },
         ]}
         active={tab}
         onChange={setTab}
@@ -243,7 +211,7 @@ export function AddDocuments({
         </div>
       )}
 
-      {tab !== "upload" && (
+      {tab === "drive" && (
         <div className="space-y-3">
           {connection === null ? (
             <Loading rows={2} label="Checking the connection…" />
@@ -253,9 +221,9 @@ export function AddDocuments({
             <div className="space-y-3 rounded-xl border border-border bg-sunken p-5">
               <p className="text-[13px] font-medium">Connect your Google account</p>
               <p className="text-[12.5px] leading-relaxed text-ink-2">
-                This reads <strong>your</strong> Drive and <strong>your</strong> mail, not anybody
-                else&apos;s. Only the files you tick are copied into this workspace — nothing is
-                swept, and no message body is stored.
+                This reads <strong>your</strong> Drive, not anybody else&apos;s, and only to list
+                your PDFs and scans. Nothing is copied into this workspace but the files you tick,
+                and nothing is ever written back to your Drive.
               </p>
               {/* A real navigation, not a router push: this route redirects
                   out to Google's consent screen, which is not a page the
@@ -270,8 +238,7 @@ export function AddDocuments({
           ) : missingScope ? (
             <div className="space-y-3 rounded-xl border border-border bg-sunken p-5">
               <p className="text-[13px] font-medium">
-                {connection.email ?? "That account"} is connected, but not for{" "}
-                {tab === "drive" ? "Drive" : "Gmail"}
+                {connection.email ?? "That account"} is connected, but not for Drive
               </p>
               <p className="text-[12.5px] text-ink-2">
                 That permission was not granted. Connect again and approve it.
@@ -289,11 +256,7 @@ export function AddDocuments({
                 <SearchInput
                   value={query}
                   onChange={setQuery}
-                  placeholder={
-                    tab === "drive"
-                      ? "File name…"
-                      : "from:vendor, after:2025/01/01, or a vendor name…"
-                  }
+                  placeholder="File name…"
                   className="flex-1"
                 />
                 <Button variant="secondary" busy={busy} onClick={search}>
@@ -302,13 +265,11 @@ export function AddDocuments({
               </div>
 
               <p className="text-[12px] text-ink-3">
-                Reading {connection.email ?? "your connected account"}.{" "}
-                {tab === "gmail"
-                  ? "Only messages with a PDF or scan attached are listed."
-                  : "Only PDFs and scans are listed."}
+                Reading {connection.email ?? "your connected account"}. Only PDFs and scans are
+                listed.
               </p>
 
-              {tab === "drive" && driveFiles !== null && (
+              {driveFiles !== null && (
                 <PickList
                   rows={driveFiles.map((file) => ({
                     key: file.id,
@@ -325,29 +286,12 @@ export function AddDocuments({
                   emptyHint="Nothing matching that in your Drive. Try a different name."
                 />
               )}
-
-              {tab === "gmail" && mail !== null && (
-                <PickList
-                  rows={mail.map((row) => ({
-                    key: keyOf(row),
-                    title: row.filename,
-                    meta: [row.from, row.subject, row.date].filter(Boolean).join(" · "),
-                  }))}
-                  picked={picked}
-                  onToggle={toggle(setPicked)}
-                  emptyHint="No attachments matched. Gmail search terms work here — try from: or after:."
-                />
-              )}
             </>
           )}
         </div>
       )}
     </Dialog>
   );
-}
-
-function keyOf(row: MailAttachment): string {
-  return `${row.messageId}:${row.attachmentId}`;
 }
 
 function toggle(set: React.Dispatch<React.SetStateAction<Set<string>>>) {

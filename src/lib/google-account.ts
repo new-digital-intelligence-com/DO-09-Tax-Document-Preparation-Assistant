@@ -1,11 +1,5 @@
 import "server-only";
-import {
-  DRIVE_READ_SCOPE,
-  GMAIL_READ_SCOPE,
-  GMAIL_SEND_SCOPE,
-  driveEnv,
-  driveStatus,
-} from "./drive";
+import { DRIVE_READ_SCOPE, GMAIL_SEND_SCOPE, driveEnv, driveStatus } from "./drive";
 import { readStore, writeStore } from "./store";
 
 /**
@@ -46,13 +40,23 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
 /**
- * What the import features need, and nothing beyond it.
+ * What this grant asks for, and nothing beyond it.
  *
- * Deliberately excludes `drive.file`: this grant never writes to the person's
- * own Drive. It reads what they point at and it sends mail they compose. The
- * workspace connection does all the writing, into its own folder.
+ * Two scopes: read the person's Drive so they can import a document they
+ * already have, and send mail so the finished package can go to their tax
+ * manager from their own address.
+ *
+ * Notably absent is any Gmail *read* scope. Importing attachments straight
+ * from a mailbox was built and then taken out, and the permission went with
+ * it — a scope that is not requested cannot be misused, cannot widen later by
+ * accident, and does not put "read your email" in front of somebody who only
+ * wanted to attach an invoice.
+ *
+ * `drive.file` is absent for the same kind of reason: this grant never writes
+ * to the person's own Drive. The workspace connection does all the writing,
+ * into its own folder.
  */
-export const ACCOUNT_SCOPES = [DRIVE_READ_SCOPE, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE] as const;
+export const ACCOUNT_SCOPES = [DRIVE_READ_SCOPE, GMAIL_SEND_SCOPE] as const;
 
 type StoredAccount = {
   refreshToken: string;
@@ -66,14 +70,14 @@ export type AccountConnection = {
   email?: string;
   connectedAt?: string;
   /** What this person's grant actually allows, feature by feature. */
-  can: { driveImport: boolean; gmailImport: boolean; gmailSend: boolean };
+  can: { driveImport: boolean; gmailSend: boolean };
   /** Why it cannot be connected at all, when that is the situation. */
   blocked?: string;
 };
 
 const NOT_CONNECTED: AccountConnection = {
   connected: false,
-  can: { driveImport: false, gmailImport: false, gmailSend: false },
+  can: { driveImport: false, gmailSend: false },
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -187,7 +191,7 @@ export async function accountToken(): Promise<string> {
   if (!stored?.refreshToken) {
     throw new Error(
       "This workspace has no Google account connected. Connect one from Add documents, and only " +
-        "the account you approve is read.",
+        "the Drive files you pick are ever read.",
     );
   }
 
@@ -255,7 +259,6 @@ function describe(stored: StoredAccount): AccountConnection {
     connectedAt: stored.connectedAt,
     can: {
       driveImport: scopes.has(DRIVE_READ_SCOPE),
-      gmailImport: scopes.has(GMAIL_READ_SCOPE),
       gmailSend: scopes.has(GMAIL_SEND_SCOPE),
     },
   };

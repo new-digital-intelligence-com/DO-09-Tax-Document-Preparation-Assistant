@@ -220,12 +220,12 @@ export function DocumentsPanel() {
   }
 
   /**
-   * Documents that arrived from Drive or Gmail, walked through the same steps.
+   * Documents imported from a person's own Drive, walked through the same steps.
    *
    * An import has already put the bytes in the workspace by the time this is
    * called, so there is no upload phase — but the reading is identical, and so
-   * is what a person sees. A file that came from a mailbox should not be a
-   * more mysterious arrival than one dragged off a desktop.
+   * is what a person sees. A file that came from Drive should not be a more
+   * mysterious arrival than one dragged off a desktop.
    */
   async function watch(documents: { id: string; filename: string }[], importNote?: string) {
     if (documents.length === 0) {

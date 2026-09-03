@@ -452,8 +452,6 @@ export type Settings = {
   voice: string;
   /** Where collected documents live once the Drive connector is wired in. */
   driveFolderId?: string;
-  /** Gmail search used by the collection sweep, once wired in. */
-  gmailQuery?: string;
 };
 
 /* ────────────────────────────────────────────────────────────────────────────

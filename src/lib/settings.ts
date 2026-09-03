@@ -117,14 +117,12 @@ function fromEnv(): Partial<Settings> {
   const preparerEmail = process.env.PREPARER_EMAIL?.trim().toLowerCase();
   const taxManagerEmail = process.env.TAX_MANAGER_EMAIL?.trim().toLowerCase();
   const driveFolderId = process.env.DRIVE_FOLDER_ID?.trim();
-  const gmailQuery = process.env.GMAIL_QUERY?.trim();
 
   if (entity) patch.entity = entity;
   if (taxId) patch.entityTaxId = taxId;
   if (preparerEmail) patch.preparerEmail = preparerEmail;
   if (taxManagerEmail) patch.taxManagerEmail = taxManagerEmail;
   if (driveFolderId) patch.driveFolderId = driveFolderId;
-  if (gmailQuery) patch.gmailQuery = gmailQuery;
   return patch;
 }
 

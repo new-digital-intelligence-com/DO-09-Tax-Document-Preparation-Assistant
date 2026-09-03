@@ -38,20 +38,21 @@ const UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
  * the whole of its job. It is set up once by whoever runs the app.
  *
  * **The account grant** is per person and lives in `google-account.ts`: the
- * read and send scopes below, used when somebody imports an invoice out of
- * their own Drive or their own mailbox, or emails the finished package from
- * their own address.
+ * two scopes below, used when somebody imports an invoice out of their own
+ * Drive, or emails the finished package from their own address. There is no
+ * Gmail *read* scope anywhere in this app — importing attachments from a
+ * mailbox was built and then deliberately removed, and the permission went
+ * with it.
  *
  * They are separate because widening the workspace token would be a real cost
- * for no gain. Every user's documents are written through it, so a mailbox
- * scope on it would mean one token that can read one person's mail on behalf
- * of everybody — and it would force whoever set the app up to re-approve a
- * permission the workspace never uses. The scopes below are never attached to
- * this token; they belong to whichever person actually consented to them.
+ * for no gain. Every user's documents are written through it, so a broader
+ * scope on it would mean one token acting on behalf of everybody — and it
+ * would force whoever set the app up to re-approve a permission the workspace
+ * never uses. The scopes below are never attached to this token; they belong
+ * to whichever person actually consented to them.
  */
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 export const DRIVE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
-export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 export type DriveFile = {
