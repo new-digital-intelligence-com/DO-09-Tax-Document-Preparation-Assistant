@@ -1,10 +1,10 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { record } from "./audit";
-import { documentsDir, mutate, newId, readStore } from "./store";
+import { record, recordMany } from "./audit";
+import { downloadFile, findInFolder, trashFile, uploadFile, workspace } from "./drive";
+import { mutate, newId, readStore } from "./store";
 import type {
+  AuditEvent,
   Classification,
   DocumentSource,
   DocumentView,
@@ -22,52 +22,16 @@ import type {
  * line) can be recomputed from a document, and a document cannot be recomputed
  * from any of them. So the row and the file are written together and removed
  * together, and neither is ever quietly replaced.
- */
-
-/**
- * Document files live under the active user's directory, not a shared one.
  *
- * `documentsDir()` resolves it per call rather than at module load, because the
- * active user changes while the process is running and a constant captured at
- * import time would serve one person's PDFs to whoever switched in next.
+ * The bytes themselves live only on Drive, in the active user's `input/`
+ * folder. There is no local copy at any point, on this machine or any other —
+ * `ingest` uploads straight to Drive, and `readDocumentBytes` downloads from
+ * there on every call. A document's row carries `sourceRef`, the Drive file's
+ * own id, as the one thing that says where its bytes actually are.
  */
-
-/**
- * The file extension is taken from the declared type rather than the filename.
- *
- * A PNG receipt stored as `.pdf` is served to the viewer with the wrong type
- * and shows as a broken frame; the model then receives a block it cannot read
- * and the document comes back `unreadable`, blaming the page for a naming
- * fault. Unknown types fall back to `.pdf` because that is what the corpus and
- * the upload route deal in.
- */
-const EXTENSIONS: Record<string, string> = {
-  "application/pdf": ".pdf",
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/jpg": ".jpg",
-};
 
 /** Worst first, so the first flag on a document is the one that matters most. */
 const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-/**
- * Where a row's bytes actually live.
- *
- * `storagePath` is read out of a JSON file on disk and `readDocumentBytes`
- * hands whatever it points at to a browser, so only the basename is trusted: a
- * hand-edited row reading `../../../etc/passwd` resolves to a file that is not
- * there rather than to one that is. It also means the seeder writing
- * `documents/doc_f01.pdf` and an uploader writing `doc_f01.pdf` land in the
- * same place, which costs one line and saves a corpus that half-loads.
- */
-async function fileFor(doc: SourceDocument): Promise<string> {
-  const name = path.basename(doc.storagePath ?? "");
-  if (!name || name === "." || name === "..") {
-    throw new Error(`${doc.id} has no usable storage path on its register row.`);
-  }
-  return path.join(await documentsDir(), name);
-}
 
 /**
  * A page count read off the raw bytes, or nothing.
@@ -116,25 +80,37 @@ export async function getDocument(id: string): Promise<SourceDocument | undefine
 }
 
 /**
- * The file itself.
+ * The file itself, fetched from Drive.
  *
- * A missing file throws rather than returning an empty buffer. An empty buffer
- * would reach the model as a blank page and come back `unreadable`, which
- * records a storage fault as a fault of the document — and puts a filename on
- * the exceptions list that a reviewer will open, look at, and find perfectly
- * legible.
+ * `sourceRef` — the Drive file's own id — is tried first, and a name lookup in
+ * the `input` folder is the fallback: an id can go stale if the file was
+ * replaced on Drive directly, but the filename usually has not moved. A
+ * document findable by neither throws rather than returning an empty buffer —
+ * an empty buffer would reach the model as a blank page and come back
+ * `unreadable`, which records a storage fault as a fault of the document.
  */
 export async function readDocumentBytes(id: string): Promise<Buffer> {
   const doc = await getDocument(id);
   if (!doc) throw new Error(`No document ${id} on the register.`);
-  try {
-    return await readFile(await fileFor(doc));
-  } catch {
+
+  const folders = await workspace();
+
+  if (doc.sourceRef) {
+    try {
+      return await downloadFile(doc.sourceRef);
+    } catch {
+      // Fall through to a name lookup.
+    }
+  }
+
+  const match = await findInFolder(folders.inputId, doc.filename);
+  if (!match) {
     throw new Error(
-      `${doc.filename} (${doc.id}) is on the register but its file is missing from ` +
-        `.data/documents. Re-run the seeder, or upload the file again.`,
+      `${doc.filename} (${doc.id}) is on the register but its file is not in the Drive input ` +
+        "folder. It may have been moved or removed there directly — check the workspace folder.",
     );
   }
+  return downloadFile(match.id);
 }
 
 export async function readDocumentBase64(id: string): Promise<string> {
@@ -144,6 +120,11 @@ export async function readDocumentBase64(id: string): Promise<string> {
 /**
  * Take in one file.
  *
+ * The bytes are uploaded to the Drive `input` folder as part of this call —
+ * unless `sourceRef` already names a Drive file, which is the sweep's case:
+ * the bytes came FROM `input/` in the first place, so uploading them back
+ * would just create a second copy of the file that produced this call.
+ *
  * The hash is computed and reported, and the file is ingested either way.
  * Deduplicating on arrival would hide that the same invoice reached the folder
  * twice — which is itself a finding, and one that only the collection step can
@@ -151,7 +132,8 @@ export async function readDocumentBase64(id: string): Promise<string> {
  * duplicate check downstream can never raise, so the caller gets `duplicateOf`
  * and the exception engine gets both rows.
  */
-export async function ingest(input: {
+
+type IngestInput = {
   filename: string;
   bytes: Buffer;
   mimeType: string;
@@ -162,9 +144,24 @@ export async function ingest(input: {
   actor: string;
   /** Supplied only by the seeder, which uses stable ids so a corpus reproduces. */
   id?: string;
-}): Promise<{ doc: SourceDocument; duplicateOf?: SourceDocument }> {
+};
+
+/**
+ * The register row for one file, computed but not written anywhere.
+ *
+ * `existing` is passed in rather than read here, so a caller ingesting many
+ * files at once — the sweep's case — reads the register once for the whole
+ * batch instead of once per file. `duplicateOf` is found against whatever the
+ * caller passed, which for a batch includes rows built earlier in the SAME
+ * batch: two identical files arriving in one sweep are still each other's
+ * duplicate, even though neither was on the register a moment before either
+ * of them was.
+ */
+function buildDocumentRow(
+  input: IngestInput & { sourceRef: string },
+  existing: SourceDocument[],
+): { doc: SourceDocument; duplicateOf?: SourceDocument } {
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
-  const existing = await readStore<SourceDocument[]>("documents", []);
   const id = input.id ?? newId("doc");
 
   /**
@@ -176,14 +173,7 @@ export async function ingest(input: {
    * preferred only for which row is named.
    */
   const candidates = existing.filter((doc) => doc.sha256 === sha256 && doc.id !== id);
-  const duplicateOf =
-    candidates.find((doc) => doc.periodId === input.periodId) ?? candidates[0];
-
-  const extension = EXTENSIONS[input.mimeType] ?? ".pdf";
-  const storagePath = `documents/${id}${extension}`;
-
-  // documentsDir() creates the directory, so there is no separate mkdir.
-  await writeFile(path.join(await documentsDir(), `${id}${extension}`), input.bytes);
+  const duplicateOf = candidates.find((doc) => doc.periodId === input.periodId) ?? candidates[0];
 
   const doc: SourceDocument = {
     id,
@@ -196,16 +186,44 @@ export async function ingest(input: {
     bytes: input.bytes.byteLength,
     pageCount: countPages(input.bytes, input.mimeType),
     sha256,
-    storagePath,
     ingestedAt: new Date().toISOString(),
     ingestedBy: input.actor,
   };
 
+  return { doc, duplicateOf };
+}
+
+const ingestDetail = (doc: SourceDocument, sha256: string) =>
+  `Ingested ${doc.filename} (${doc.bytes} bytes, ` +
+  `${doc.pageCount === undefined ? "page count not established" : `${doc.pageCount} page(s)`}) ` +
+  `from ${doc.source}${doc.sourceDetail ? ` — ${doc.sourceDetail}` : ""}. sha256 ${sha256.slice(0, 12)}.`;
+
+const duplicateDetail = (doc: SourceDocument, duplicateOf: SourceDocument) =>
+  `${doc.filename} is byte-identical to ${duplicateOf.filename} (${duplicateOf.id}, ` +
+  `ingested ${duplicateOf.ingestedAt}). Both are kept: the second arrival is the finding.`;
+
+export async function ingest(input: IngestInput): Promise<{ doc: SourceDocument; duplicateOf?: SourceDocument }> {
+  const existing = await readStore<SourceDocument[]>("documents", []);
+
+  let sourceRef = input.sourceRef;
+  if (!sourceRef) {
+    const folders = await workspace();
+    const uploaded = await uploadFile({
+      parentId: folders.inputId,
+      name: input.filename,
+      bytes: input.bytes,
+      mimeType: input.mimeType,
+    });
+    sourceRef = uploaded.id;
+  }
+
+  const { doc, duplicateOf } = buildDocumentRow({ ...input, sourceRef }, existing);
+
   // Replace by id rather than append blindly: two rows sharing an id would make
   // every join downstream pick one of them arbitrarily.
   await mutate<SourceDocument[], void>("documents", [], (docs) => ({
-    next: docs.some((current) => current.id === id)
-      ? docs.map((current) => (current.id === id ? doc : current))
+    next: docs.some((current) => current.id === doc.id)
+      ? docs.map((current) => (current.id === doc.id ? doc : current))
       : [...docs, doc],
     result: undefined,
   }));
@@ -215,11 +233,7 @@ export async function ingest(input: {
     action: "document.ingest",
     subject: doc.id,
     result: "ok",
-    detail:
-      `Ingested ${doc.filename} (${doc.bytes} bytes, ` +
-      `${doc.pageCount === undefined ? "page count not established" : `${doc.pageCount} page(s)`}) ` +
-      `from ${doc.source}${doc.sourceDetail ? ` — ${doc.sourceDetail}` : ""}. ` +
-      `sha256 ${sha256.slice(0, 12)}.`,
+    detail: ingestDetail(doc, doc.sha256),
     periodId: doc.periodId,
     docId: doc.id,
   });
@@ -233,15 +247,120 @@ export async function ingest(input: {
       action: "document.duplicate-detected",
       subject: doc.id,
       result: "info",
-      detail:
-        `${doc.filename} is byte-identical to ${duplicateOf.filename} (${duplicateOf.id}, ` +
-        `ingested ${duplicateOf.ingestedAt}). Both are kept: the second arrival is the finding.`,
+      detail: duplicateDetail(doc, duplicateOf),
       periodId: doc.periodId,
       docId: doc.id,
     });
   }
 
   return { doc, duplicateOf };
+}
+
+/**
+ * `ingest`, for many files whose bytes are already on Drive.
+ *
+ * Built for the sweep, which can find dozens of unfamiliar files in the
+ * `input` folder at once. Calling `ingest` once per file would mean reading
+ * and rewriting the WHOLE document register, and appending to the WHOLE audit
+ * trail, once per file — a workspace with forty documents already on record
+ * pays for reading and rewriting all forty, forty separate times, to add one
+ * more each time. This reads the register once, computes every row in memory,
+ * and writes the register and the audit trail once each for the entire batch.
+ *
+ * Every input must already carry `sourceRef` — the Drive file id — because
+ * the whole reason this exists is to skip the per-file upload step; a caller
+ * with bytes that are not yet on Drive should use `ingest` instead.
+ */
+export async function ingestMany(
+  inputs: (IngestInput & { sourceRef: string })[],
+): Promise<{ doc: SourceDocument; duplicateOf?: SourceDocument }[]> {
+  if (inputs.length === 0) return [];
+
+  const existing = await readStore<SourceDocument[]>("documents", []);
+  const seenSoFar = [...existing];
+  const built: { doc: SourceDocument; duplicateOf?: SourceDocument }[] = [];
+
+  for (const input of inputs) {
+    const result = buildDocumentRow(input, seenSoFar);
+    built.push(result);
+    // So two identical files arriving in the SAME sweep are each other's
+    // duplicate too, not just duplicates of something already on record.
+    seenSoFar.push(result.doc);
+  }
+
+  await mutate<SourceDocument[], void>("documents", [], (docs) => ({
+    next: [...docs, ...built.map((row) => row.doc)],
+    result: undefined,
+  }));
+
+  const auditRows: Omit<AuditEvent, "id" | "at">[] = [];
+  for (const { doc, duplicateOf } of built) {
+    auditRows.push({
+      actor: doc.ingestedBy,
+      action: "document.ingest",
+      subject: doc.id,
+      result: "ok",
+      detail: ingestDetail(doc, doc.sha256),
+      periodId: doc.periodId,
+      docId: doc.id,
+    });
+    if (duplicateOf) {
+      auditRows.push({
+        actor: doc.ingestedBy,
+        action: "document.duplicate-detected",
+        subject: doc.id,
+        result: "info",
+        detail: duplicateDetail(doc, duplicateOf),
+        periodId: doc.periodId,
+        docId: doc.id,
+      });
+    }
+  }
+  await recordMany(auditRows);
+
+  return built;
+}
+
+/**
+ * Take a document out of the shared workspace entirely.
+ *
+ * Used for a document that turned out not to belong there — declined as out
+ * of scope, most often. The Drive file is trashed (recoverable from Drive's
+ * own trash, never permanently destroyed by this app) rather than left
+ * sitting in `input/`: that folder is the tax workspace, and a photograph or
+ * a CV left in it because someone dropped it on the upload button is exactly
+ * the data-minimisation failure the operating rules warn about. The register
+ * row is kept — the person who uploaded it is still owed a record of what
+ * happened and why — only the file content is withdrawn.
+ */
+export async function withdrawFromWorkspace(id: string, actor: string, reason: string): Promise<void> {
+  const doc = await getDocument(id);
+  if (!doc?.sourceRef) return;
+  try {
+    await trashFile(doc.sourceRef);
+  } catch (error) {
+    await record({
+      actor,
+      action: "document.withdraw-failed",
+      subject: id,
+      result: "error",
+      detail:
+        `${doc.filename} could not be removed from the Drive input folder: ` +
+        `${error instanceof Error ? error.message : "unknown error"}. Reason for withdrawal: ${reason}.`,
+      periodId: doc.periodId,
+      docId: id,
+    });
+    return;
+  }
+  await record({
+    actor,
+    action: "document.withdrawn",
+    subject: id,
+    result: "info",
+    detail: `${doc.filename} was removed from the Drive input folder: ${reason}. The register row is kept.`,
+    periodId: doc.periodId,
+    docId: id,
+  });
 }
 
 /**
@@ -260,6 +379,10 @@ export async function ingest(input: {
  * drops findings that no longer apply and logs that it did, and it keeps the
  * resolution note a person wrote. Clearing them from here would erase that note
  * without anyone deciding to.
+ *
+ * The Drive file is trashed, not merely forgotten — a row removed from the
+ * register but left sitting in `input/` would reappear as an unfamiliar file
+ * on the very next sweep and be ingested straight back in.
  */
 export async function removeDocument(id: string, actor: string, reason: string): Promise<void> {
   const note = reason?.trim() ?? "";
@@ -270,9 +393,6 @@ export async function removeDocument(id: string, actor: string, reason: string):
   const doc = await getDocument(id);
   if (!doc) throw new Error(`No document ${id} on the register.`);
 
-  // The row first, then the bytes. A file left without a row is invisible and
-  // harmless; a row left pointing at a file that is gone breaks the viewer and
-  // the extractor for as long as it sits there.
   await mutate<SourceDocument[], void>("documents", [], (docs) => ({
     next: docs.filter((current) => current.id !== id),
     result: undefined,
@@ -286,7 +406,15 @@ export async function removeDocument(id: string, actor: string, reason: string):
     result: undefined,
   }));
 
-  await rm(await fileFor(doc), { force: true });
+  if (doc.sourceRef) {
+    try {
+      await trashFile(doc.sourceRef);
+    } catch {
+      // The register no longer lists this document either way; a file that
+      // could not be trashed is a Drive-side cleanup task, not a reason to
+      // fail the deletion the person actually asked for.
+    }
+  }
 
   await record({
     actor,
@@ -295,7 +423,7 @@ export async function removeDocument(id: string, actor: string, reason: string):
     result: "ok",
     detail:
       `Deleted ${doc.filename} (${doc.id}, sha256 ${doc.sha256.slice(0, 12)}, ingested ` +
-      `${doc.ingestedAt} from ${doc.source}) along with its extraction, categorisation and ` +
+      `${doc.ingestedAt} from ${doc.source}) along with its extraction and categorisation. ` +
       `Reason: ${note}`,
     periodId: doc.periodId,
     docId: doc.id,
@@ -313,38 +441,6 @@ export async function removeDocument(id: string, actor: string, reason: string):
  * never a synthetic empty one — the console has to be able to tell "not read
  * yet" from "read, and it said nothing".
  */
-/**
- * Delete a document's bytes while keeping its register row.
- *
- * Distinct from `removeDocument`, which forgets the document entirely. This is
- * the prune path: the row, the extraction and every finding raised against it
- * stay exactly as they are, and only the local copy of the file goes — because
- * Drive has it and the viewer can fetch it from there.
- */
-export async function removeLocalFile(id: string): Promise<void> {
-  const doc = await getDocument(id);
-  if (!doc) return;
-  await rm(await fileFor(doc), { force: true });
-}
-
-/**
- * Record which Drive file a document became, once it has been pushed there.
- *
- * Without this, a document ingested by upload and later pushed to the input
- * folder has no `sourceRef` — the row still says how it arrived, not where it
- * now also lives. A later full sync from a machine with no local copy of that
- * document would then see it in the input folder as an unfamiliar file and
- * ingest it a second time, turning one upload into two rows of the same
- * invoice. `source` is left as it was; only where the file can now be found
- * changes.
- */
-export async function recordDriveFile(id: string, driveFileId: string): Promise<void> {
-  await mutate<SourceDocument[], void>("documents", [], (docs) => ({
-    next: docs.map((doc) => (doc.id === id ? { ...doc, sourceRef: driveFileId } : doc)),
-    result: undefined,
-  }));
-}
-
 export async function documentViews(periodId: string): Promise<DocumentView[]> {
   const [docs, extractions, classifications, exceptions] = await Promise.all([
     listDocuments({ periodId }),
@@ -355,7 +451,6 @@ export async function documentViews(periodId: string): Promise<DocumentView[]> {
 
   const extractionByDoc = new Map(extractions.map((row) => [row.docId, row]));
   const classificationByDoc = new Map(classifications.map((row) => [row.docId, row]));
-
 
   const exceptionsByDoc = new Map<string, TaxException[]>();
   for (const exception of exceptions) {
@@ -382,18 +477,13 @@ export async function documentViews(periodId: string): Promise<DocumentView[]> {
 /**
  * What each collection source returned, and whether it was asked.
  *
- * `available: false` is the whole point of this function. Google Drive and
- * Gmail are not wired into this build: no sweep has run against either, so the
- * number of documents in them is *unknown*. Reporting that as `documents: 0`
- * would put a zero on the console that reads as "there is nothing there", and a
- * quarter prepared on the strength of that zero is missing whatever was in the
- * folder. Zero rows from a sweep nobody ran is not "no documents".
- *
- * The counts are still returned for a source marked unavailable, because rows
- * labelled `drive` or `gmail` can exist — the fixture generator labels some
- * that way to exercise the mixed-source paths — and the detail says exactly
- * where they came from. The console renders an em dash for the figure whenever
- * `available` is false.
+ * `available: false` is the whole point of this function for a source that has
+ * genuinely not been swept. Gmail is not wired into this build: no search has
+ * run against it, so the number of documents in it is *unknown*. Reporting
+ * that as `documents: 0` would put a zero on the console that reads as "there
+ * is nothing there" — zero rows from a sweep nobody ran is not "no documents".
+ * Drive, by contrast, IS wired in and swept for real, so it is reported as
+ * available with a genuine count.
  */
 export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sources"]> {
   const docs = await listDocuments({ periodId });
@@ -404,12 +494,6 @@ export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sou
   const drive = count("drive");
   const gmail = count("gmail");
 
-  const placed = (n: number, label: string) =>
-    n > 0
-      ? ` ${n} row(s) in this period are labelled ${label}; they were placed by the fixture ` +
-        `generator, not collected by a sweep.`
-      : "";
-
   return [
     {
       source: "fixture",
@@ -418,7 +502,7 @@ export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sou
       detail:
         fixtures > 0
           ? `${fixtures} document(s) from the generated corpus.`
-          : "No corpus loaded. Run npm run fixtures, then npm run seed.",
+          : "No corpus loaded. Run npm run fixtures to generate one, then sweep it into a workspace.",
     },
     {
       source: "upload",
@@ -431,15 +515,12 @@ export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sou
     },
     {
       source: "drive",
-      available: false,
+      available: true,
       documents: drive,
       detail:
-        "Google Drive is not wired into this build, so no sweep has run against it and the " +
-        "figure is unknown rather than zero." +
-        (process.env.DRIVE_FOLDER_ID?.trim()
-          ? " DRIVE_FOLDER_ID is set, but a folder id is not a sweep."
-          : "") +
-        placed(drive, "drive"),
+        drive > 0
+          ? `${drive} document(s) collected from the workspace's Drive input folder.`
+          : "The Drive input folder has not produced any documents in this period yet.",
     },
     {
       source: "gmail",
@@ -448,10 +529,11 @@ export async function sourceBreakdown(periodId: string): Promise<PrepStatus["sou
       detail:
         "Gmail is not wired into this build, so no search has run and the figure is unknown " +
         "rather than zero." +
-        (process.env.GMAIL_QUERY?.trim()
-          ? " GMAIL_QUERY is set, but a query is not a search."
-          : "") +
-        placed(gmail, "gmail"),
+        (process.env.GMAIL_QUERY?.trim() ? " GMAIL_QUERY is set, but a query is not a search." : "") +
+        (gmail > 0
+          ? ` ${gmail} row(s) in this period are labelled gmail; they were placed by the fixture ` +
+            "generator, not collected by a sweep."
+          : ""),
     },
   ];
 }

@@ -122,8 +122,6 @@ export type SourceDocument = {
    * conflated in the exception text.
    */
   sha256: string;
-  /** Path under `.data/documents/`. Never an absolute path in stored JSON. */
-  storagePath: string;
   ingestedAt: string;
   ingestedBy: string;
 };

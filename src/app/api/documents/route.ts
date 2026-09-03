@@ -1,6 +1,5 @@
-import { documentViews, ingest, listDocuments } from "@/lib/documents";
-import { driveStatus } from "@/lib/drive";
-import { processDocument, pushDocumentToDrive } from "@/lib/workspace-sync";
+import { documentViews, ingest, listDocuments, withdrawFromWorkspace } from "@/lib/documents";
+import { processDocument } from "@/lib/workspace-sync";
 import { activePeriod, preparer } from "@/lib/settings";
 import { bad, failed, ok } from "@/lib/http";
 
@@ -18,28 +17,30 @@ export async function GET() {
 }
 
 /**
- * Upload, read, and put it where the next run will find it.
+ * Upload, read, and file it where it belongs.
  *
- * Four things happen to a file dropped on this route, in this order, and the
- * order is the design.
+ * Three things happen to a file dropped on this route, in this order.
  *
- * 1. It is **ingested even if it duplicates one already held**. Refusing the
- *    second copy would hide that the same invoice arrived twice, and that is a
- *    finding a reviewer wants: a vendor billing twice and a folder synced twice
- *    look identical from here, and only a person can tell them apart.
+ * 1. It is **uploaded to the shared Drive folder and ingested even if it
+ *    duplicates one already held**. There is no local copy at any point, not
+ *    even briefly — `ingest` puts the bytes straight onto Drive. Refusing a
+ *    duplicate on arrival would hide that the same invoice showed up twice,
+ *    and that is a finding a reviewer wants: a vendor billing twice and a
+ *    folder synced twice look identical from here, and only a person can
+ *    tell them apart.
  *
- * 2. It is **read and categorised immediately**, rather than left for the next
- *    sweep. Somebody who has just dropped a receipt on the page is waiting for
- *    an answer, and "it will be picked up later" is not one.
+ * 2. It is **read and categorised immediately**, rather than left for the
+ *    next sweep. Somebody who has just dropped a receipt on the page is
+ *    waiting for an answer, and "it will be picked up later" is not one.
  *
- * 3. Anything that is **not a financial document is declined** with the reason
- *    the model gave. People upload whatever they have, and a CV forced onto the
- *    chart of tax categories is worse than a CV turned away.
- *
- * 4. Only what succeeded is **pushed to the shared Drive folder**. A declined
- *    document is never uploaded: that folder is the tax workspace, and putting
- *    somebody's holiday photograph in it because they dropped it on this page
- *    is exactly the data-minimisation failure the operating rules warn about.
+ * 3. Anything that is **not a financial document is withdrawn from the
+ *    shared folder** with the model's reason kept on the register row. It has
+ *    to reach Drive before extraction can even look at it — there is nowhere
+ *    else for the bytes to sit while that is decided — so the data-
+ *    minimisation rule is honoured in reverse order here: add, then remove
+ *    what turns out not to belong, rather than never adding it in the first
+ *    place. A CV or a holiday photograph does not stay in the tax workspace
+ *    either way.
  */
 export async function POST(request: Request) {
   try {
@@ -51,7 +52,6 @@ export async function POST(request: Request) {
 
     const period = await activePeriod();
     const actor = preparer();
-    const driveReady = driveStatus().state === "ready";
     const before = (await listDocuments({ periodId: period.id })).length;
 
     type UploadResult = {
@@ -64,8 +64,6 @@ export async function POST(request: Request) {
       total?: number;
       currency?: string;
       categoryId?: string;
-      storedToDrive: boolean;
-      driveDetail: string;
       duplicateOf?: { id: string; filename: string };
     };
     const results: UploadResult[] = [];
@@ -84,25 +82,12 @@ export async function POST(request: Request) {
 
       const outcome = await processDocument(doc.id, { actor });
 
-      // The push is conditional on the document being something this workspace
-      // should hold, not merely on the run not crashing.
-      let drive = { stored: false, detail: "Drive is not connected." };
-      if (driveReady && (outcome.status === "computed" || outcome.status === "reused")) {
-        try {
-          drive = await pushDocumentToDrive(doc.id);
-        } catch (error) {
-          drive = {
-            stored: false,
-            detail: `Processed, but could not be added to Drive: ${
-              error instanceof Error ? error.message : "unknown error"
-            }`,
-          };
-        }
-      } else if (driveReady && outcome.status === "declined") {
-        drive = {
-          stored: false,
-          detail: "Not added to the shared folder, because it is not a financial document.",
-        };
+      if (outcome.status === "declined") {
+        await withdrawFromWorkspace(
+          doc.id,
+          actor,
+          outcome.detail || "Not a financial document.",
+        );
       }
 
       results.push({
@@ -115,8 +100,6 @@ export async function POST(request: Request) {
         total: outcome.total,
         currency: outcome.currency,
         categoryId: outcome.categoryId,
-        storedToDrive: drive.stored,
-        driveDetail: drive.detail,
         duplicateOf: duplicateOf
           ? { id: duplicateOf.id, filename: duplicateOf.filename }
           : undefined,
@@ -133,15 +116,13 @@ export async function POST(request: Request) {
       reused: count("reused"),
       declined: count("declined"),
       failed: count("failed"),
-      duplicates,
-      storedToDrive: results.filter((r) => r.storedToDrive).length,
       documents: results,
       note: [
         duplicates
           ? `${duplicates} of these is byte-identical to a document already collected. Both were kept — run detection and it will be flagged.`
           : "",
         count("declined")
-          ? `${count("declined")} was not a financial document and was declined rather than categorised. It is not on the shared folder.`
+          ? `${count("declined")} was not a financial document and was withdrawn from the shared Drive folder rather than categorised.`
           : "",
         count("reused")
           ? `${count("reused")} had already been processed, so the stored result was reused rather than paid for again.`

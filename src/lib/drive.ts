@@ -22,7 +22,7 @@ import "server-only";
  * true at a time.
  */
 
-import { rememberDriveFolder, requireActiveUser } from "./users";
+import { requireActiveUser } from "./users";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -412,88 +412,87 @@ export type Workspace = {
   userFolderName: string;
   inputId: string;
   outputId: string;
+  /** Everything `store.ts` persists — the document register, exceptions, forms, audit trail. */
+  stateId: string;
 };
 
-/** Keyed by user, because two users have two different workspaces. */
+/**
+ * Keyed by user, and holding only Drive folder IDs — never a document, a
+ * figure or anything a person typed. Losing this on a restart costs three
+ * `ensureFolder` calls the next time the workspace is touched, nothing more;
+ * it exists purely so a run over forty documents does not resolve the same
+ * three folder ids forty times.
+ */
 const cachedWorkspaces = new Map<string, Workspace>();
 
 /**
- * One user's `input` and `output` folders.
+ * One user's `input`, `output` and `state` folders.
  *
  * The shape on Drive is a folder per user inside the shared root:
  *
  *     do-09 test/
  *       helmi-mf3k9x2a/
- *         input/
- *         output/
- *       dana-mf3k9zb1/
- *         input/
- *         output/
+ *         profile.json
+ *         input/     the documents
+ *         output/    one <sha256>.json per processed document
+ *         state/     the register: documents, extractions, classifications,
+ *                    exceptions, forms, packages, audit — one JSON file per
+ *                    collection. This is the ONLY place any of that lives.
+ *                    There is no local copy, on this machine or any other —
+ *                    every read and every write goes through this folder.
  *
  * A folder per user rather than a filename convention inside one, because the
  * folder is the unit people actually share, move and look at. Somebody wanting
  * to hand their accountant this quarter's documents can share one folder; with
  * everything in a single pile they would be sharing everybody's.
  *
- * The user's folder is found by name and created if it is not there, and its id
- * is remembered on the user's row so the lookup happens once rather than on
- * every document.
+ * `requireActiveUser()` now resolves the user by reading Drive's own folder
+ * listing, so `user.driveFolderId` is always the real, current id — there is
+ * nothing here to "remember" across a restart or double-check for staleness.
  */
 export async function workspace(): Promise<Workspace> {
   const user = await requireActiveUser();
   const cached = cachedWorkspaces.get(user.id);
   if (cached) return cached;
 
-  const rootId = driveEnv().folderId;
-
-  // A remembered id is trusted only as far as a call that uses it; if the
-  // folder was moved or deleted on Drive, fall back to finding it by name
-  // rather than failing every write with a stale id.
-  let userFolderId = user.driveFolderId;
-  if (userFolderId) {
-    try {
-      await call(`/files/${userFolderId}?fields=id,trashed&supportsAllDrives=true`);
-    } catch {
-      userFolderId = undefined;
-    }
-  }
-  if (!userFolderId) {
-    const existing = await findInFolder(rootId, user.driveFolderName);
-    if (existing) {
-      userFolderId = existing.id;
-    } else {
-      userFolderId = await ensureFolder(rootId, user.driveFolderName);
-      // Written once, at creation, so a second machine that has never heard
-      // of this user can still recover the real name and creation date from
-      // the folder itself rather than guessing at the id in its name.
-      await putJson(userFolderId, "profile.json", {
-        id: user.id,
-        name: user.name,
-        slug: user.slug,
-        createdAt: user.createdAt,
-      });
-    }
-    await rememberDriveFolder(user.id, userFolderId);
-  }
-
-  const [inputId, outputId] = await Promise.all([
-    ensureFolder(userFolderId, "input"),
-    ensureFolder(userFolderId, "output"),
+  const [inputId, outputId, stateId] = await Promise.all([
+    ensureFolder(user.driveFolderId, "input"),
+    ensureFolder(user.driveFolderId, "output"),
+    ensureFolder(user.driveFolderId, "state"),
   ]);
 
   const resolved: Workspace = {
-    rootId,
-    userFolderId,
+    rootId: driveEnv().folderId,
+    userFolderId: user.driveFolderId,
     userFolderName: user.driveFolderName,
     inputId,
     outputId,
+    stateId,
   };
   cachedWorkspaces.set(user.id, resolved);
   return resolved;
 }
 
-/** Drop cached ids and tokens, for when the root folder is repointed. */
+/** Drop cached folder ids and tokens, for when the root folder is repointed. */
 export function forgetWorkspace(): void {
   cachedWorkspaces.clear();
   cachedToken = null;
+}
+
+/**
+ * Move a file to Drive's trash, reversibly.
+ *
+ * Used when a document turns out not to belong in the shared workspace —
+ * declined as out of scope, or explicitly removed from the register. Trash
+ * rather than permanent deletion: a person who uploaded the wrong file by
+ * mistake can still recover it from Drive's own trash, and this app has no
+ * "are you sure, really" step of its own to put in front of something
+ * unrecoverable.
+ */
+export async function trashFile(fileId: string): Promise<void> {
+  await call(`/files/${fileId}?supportsAllDrives=true`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
 }

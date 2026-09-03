@@ -1,5 +1,5 @@
 import "server-only";
-import { append, newId, readStore } from "./store";
+import { append, appendMany, newId, readStore } from "./store";
 import type { AuditEvent } from "./types";
 
 /**
@@ -35,6 +35,26 @@ export async function record(event: Omit<AuditEvent, "id" | "at">): Promise<Audi
    * disk with nothing.
    */
   return append<AuditEvent>("audit", entry, 20000);
+}
+
+/**
+ * `record`, for several events from one operation.
+ *
+ * Exists for a bulk sweep — a hundred new documents found on Drive at once —
+ * where a hundred calls to `record` would each read and rewrite the whole
+ * trail. Pass events oldest-first, the order they actually happened in.
+ */
+export async function recordMany(events: Omit<AuditEvent, "id" | "at">[]): Promise<AuditEvent[]> {
+  const now = Date.now();
+  const entries: AuditEvent[] = events.map((event, i) => ({
+    ...event,
+    id: newId("aud"),
+    // Spread by a millisecond each so two events from the same batch never
+    // share a timestamp — sorting or de-duplicating by `at` elsewhere stays
+    // meaningful.
+    at: new Date(now + i).toISOString(),
+  }));
+  return appendMany<AuditEvent>("audit", entries, 20000);
 }
 
 /**

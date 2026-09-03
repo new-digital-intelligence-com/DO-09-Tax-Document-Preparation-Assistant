@@ -1,56 +1,58 @@
 import "server-only";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { requireActiveUser, userDataDir } from "./users";
+import { findInFolder, putJson, readTextFile, workspace } from "./drive";
 
 /**
- * The register's storage: JSON files under `.data/users/<userId>/`.
+ * The register's storage: Drive, and Drive only.
  *
- * Documents, extractions, categorisations, the ledger, matches, exceptions,
- * form drafts, packages and the audit trail all live here. Nothing else in the
- * app knows or cares how they are persisted — everything goes through
- * `readStore` / `writeStore` / `mutate` / `append`.
+ * Documents, extractions, categorisations, exceptions, form drafts, packages
+ * and the audit trail all live as JSON files in the active user's `state/`
+ * folder on Drive — nothing here is ever written to this machine's disk.
+ * Every read genuinely asks Drive; every write genuinely goes to Drive. There
+ * is no local cache to fall out of sync with it, no `.data/` directory to lose
+ * track of, and no difference between opening this app on the machine that
+ * seeded it and opening it on one that has never touched it before — both ask
+ * Drive the same question and get the same answer.
  *
- * **Every one of those is scoped to the active user.** That is not a
- * convenience: this app prepares tax filings, and one person's receipts
- * appearing in another person's Schedule C is the worst thing it could quietly
- * do. Scoping in the storage layer rather than in each caller means a new
- * module cannot forget — there is no unscoped path to reach for.
+ * That correctness costs a network round trip on every read and every write.
+ * It is spent deliberately: the alternative is a local copy that can disagree
+ * with what is actually on Drive, and a tax register that quietly drifted from
+ * the shared source of truth is a worse failure than a slow page load.
  *
- * The user registry itself is the one thing that cannot live here, since it is
- * what answers "which user". It keeps its own file in `users.ts`.
+ * `mutate`'s per-name promise chain is the one thing kept in memory rather
+ * than asked of Drive on every call — it is not data, it is a queue, gone the
+ * moment this process exits, and it exists only to stop two writes landing on
+ * the same collection from this one process at the same moment. It cannot and
+ * does not protect against a second machine writing to the same Drive folder
+ * at the same time; nothing in a shared-folder-of-JSON-files design can. That
+ * risk is accepted, not solved, the same way it always was the moment more
+ * than one machine could touch the same workspace.
  *
- * Swap this for a database when it serves more than one operator; the shapes
- * above it are narrow enough that nothing else has to change.
+ * Every other module reaches this through `readStore` / `writeStore` /
+ * `mutate` / `append`, unaware that the ground underneath changed — the
+ * contract is identical to what a local-disk implementation would offer, so
+ * nothing downstream had to change to stop being local.
  */
-
-async function file(name: string): Promise<string> {
-  const user = await requireActiveUser();
-  const dir = userDataDir(user.id);
-  await mkdir(dir, { recursive: true });
-  return path.join(dir, `${name}.json`);
-}
 
 export async function readStore<T>(name: string, fallback: T): Promise<T> {
   try {
-    return JSON.parse(await readFile(await file(name), "utf8")) as T;
+    const folders = await workspace();
+    const file = await findInFolder(folders.stateId, `${name}.json`);
+    if (!file) return fallback;
+    return JSON.parse(await readTextFile(file.id)) as T;
   } catch {
+    // A collection that was never written, or a parse failure on a row
+    // something else left malformed, both read as "nothing here yet" — the
+    // same answer a missing local file used to give. A genuine Drive outage
+    // is caught and reported separately, by the callers that check
+    // `driveStatus()` before relying on an empty result meaning anything.
     return fallback;
   }
 }
 
-/**
- * Writes go through a temp file and a rename.
- *
- * An audit trail truncated by a crash mid-write reads afterwards as "nothing
- * happened", which is worse than useless. A rename is atomic on the same
- * filesystem, so a reader sees either the old file or the whole new one.
- */
+/** Writes go straight to Drive; there is nothing else to keep in step with. */
 export async function writeStore<T>(name: string, value: T): Promise<void> {
-  const target = await file(name);
-  const temp = `${target}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify(value, null, 2), "utf8");
-  await rename(temp, target);
+  const folders = await workspace();
+  await putJson(folders.stateId, `${name}.json`, value);
 }
 
 /**
@@ -64,22 +66,45 @@ export async function append<T extends { id: string }>(
   record: T,
   cap = 20000,
 ): Promise<T> {
-  return mutate<T[], T>(name, [], (log) => ({
-    next: [record, ...log].slice(0, cap),
-    result: record,
+  const [result] = await appendMany(name, [record], cap);
+  return result;
+}
+
+/**
+ * Add several records in one read-modify-write.
+ *
+ * `append` costs one Drive read and one Drive write. Calling it N times in a
+ * loop costs N of each — and each of those N writes carries the WHOLE
+ * collection, which grows on every iteration. A sync that finds thirty-nine
+ * new documents and logs one audit row per document would, through `append`
+ * alone, read and rewrite an audit trail that is already hundreds of rows
+ * long thirty-nine separate times. This does the same append, once.
+ *
+ * `records` is given oldest-first — the order they happened in — and the
+ * result is stored newest-first, matching what a sequence of plain `append`
+ * calls would have produced.
+ */
+export async function appendMany<T extends { id: string }>(
+  name: string,
+  records: T[],
+  cap = 20000,
+): Promise<T[]> {
+  if (records.length === 0) return [];
+  return mutate<T[], T[]>(name, [], (log) => ({
+    next: [...records].reverse().concat(log).slice(0, cap),
+    result: records,
   }));
 }
 
 /**
- * Serialise read-modify-write on one collection.
+ * Serialise read-modify-write on one collection, within this process.
  *
- * Two extractions landing at once would otherwise each read the same array and
- * the second write would drop the first result. The chain is keyed by user and
- * collection together: two users working the same collection have no reason to
- * queue behind each other, and one long run would stall the other.
- *
- * A per-name promise chain is enough while this is one process; a database
- * transaction replaces it when it is not.
+ * Two extractions landing at once in the SAME running server would otherwise
+ * each read the same Drive file and the second write would drop the first
+ * result — this queue is what stops that. It is keyed by user and collection
+ * together, so two users working different corpora never queue behind each
+ * other, and it is pure in-memory bookkeeping: nothing it tracks is a value
+ * this app stores, only the order two writes happen in.
  */
 const chains = new Map<string, Promise<unknown>>();
 
@@ -88,8 +113,11 @@ export async function mutate<T, R>(
   fallback: T,
   change: (current: T) => Promise<{ next: T; result: R }> | { next: T; result: R },
 ): Promise<R> {
-  const user = await requireActiveUser();
-  const key = `${user.id}:${name}`;
+  // Resolving the user id here, before the chain, means the queue key is
+  // stable for the duration of this call even if the active workspace is
+  // switched moments later by another request.
+  const folders = await workspace();
+  const key = `${folders.userFolderId}:${name}`;
 
   const run = (chains.get(key) ?? Promise.resolve()).then(async () => {
     const current = await readStore<T>(name, fallback);
@@ -98,21 +126,13 @@ export async function mutate<T, R>(
     return result;
   });
 
-  // Keep the chain alive even when this link rejects, or one failed write would
-  // deadlock every later write to the same collection.
+  // Keep the chain alive even when this link rejects, or one failed write
+  // would deadlock every later write to the same collection.
   chains.set(
     key,
     run.catch(() => undefined),
   );
   return run as Promise<R>;
-}
-
-/** Where this user's document files live. */
-export async function documentsDir(): Promise<string> {
-  const user = await requireActiveUser();
-  const dir = path.join(userDataDir(user.id), "documents");
-  await mkdir(dir, { recursive: true });
-  return dir;
 }
 
 /** Sortable, readable, and unique enough for a single-tenant register. */

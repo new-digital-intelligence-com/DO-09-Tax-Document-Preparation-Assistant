@@ -1,4 +1,4 @@
-import { activeUser, createUser, syncUsersFromDrive } from "@/lib/users";
+import { activeUser, createUser, listUsers } from "@/lib/users";
 import { driveStatus } from "@/lib/drive";
 import { bad, body, failed, ok, str } from "@/lib/http";
 
@@ -7,11 +7,10 @@ export const runtime = "nodejs";
 /**
  * Who this instance knows about, and who it is currently working as.
  *
- * The list is reconciled against Drive first — `syncUsersFromDrive` falls back
- * to the local registry when Drive is not configured, so this is safe to call
- * unconditionally. Without that reconciliation, a fresh `.data` directory (a
- * different machine, a wiped cache) shows "no workspaces" even when Drive
- * already holds a folder full of somebody's documents.
+ * `listUsers` reads the shared Drive root fresh on every call — there is no
+ * local list of who has a workspace to fall out of step with it. Opening this
+ * app from a machine that has never touched it before returns exactly the
+ * same list as opening it from the machine that created a workspace.
  *
  * `active` is returned as `null` rather than defaulting to the first user. A
  * console that silently picked somebody's workspace because none was chosen
@@ -20,7 +19,7 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   try {
-    const [users, current] = await Promise.all([syncUsersFromDrive(), activeUser()]);
+    const [users, current] = await Promise.all([listUsers(), activeUser()]);
     return ok({
       users,
       active: current ?? null,

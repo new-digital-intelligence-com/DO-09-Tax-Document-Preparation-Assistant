@@ -1,80 +1,53 @@
 import "server-only";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { driveConfigured, findInFolder, listRootFolders, putJson, readTextFile } from "./drive";
+import { cookies } from "next/headers";
+import { driveConfigured, driveEnv, ensureFolder, findInFolder, listRootFolders, putJson, readTextFile } from "./drive";
 
 /**
  * Who the workspace is being prepared for.
  *
  * Everything in this app is scoped to one user: their documents, their
- * extractions, their flags, their drafts, and their own `input` and
- * `output` folders on Drive. There is no sign-in — this is a local tool with a
- * picker, not an authenticated product — so "the current user" is a deliberate
- * choice somebody made on the front screen, not an identity anybody proved.
+ * extractions, their flags, their drafts, and their own `input`, `output` and
+ * `state` folders on Drive. There is no local list of who has a workspace —
+ * the folders under the shared root ARE the list, read fresh every time. A
+ * `profile.json` inside each one carries the name; a folder without one (one
+ * predating this file, or made by hand on Drive) gets a name recovered from
+ * its folder name, and the profile is written back so it only has to be
+ * guessed once.
  *
- * That distinction is worth keeping honest about. Two people using the same
- * running instance share one active user, and the audit trail records the name
- * that was selected rather than the person who was typing. Put real
- * authentication in front of this before it leaves one machine.
- *
- * This module keeps its own storage rather than going through `store.ts`,
- * because `store.ts` is scoped BY the active user and asking it who that is
- * would be circular.
+ * There is no sign-in — this is a local tool with a picker, not an
+ * authenticated product — so "the current user" is a deliberate choice
+ * somebody made on the front screen, not an identity anybody proved. It lives
+ * in an HTTP cookie rather than anywhere on this server, which is what makes
+ * it genuinely per-browser: two tabs, or two machines, open against the same
+ * server each have their own active workspace, where a server-side file ever
+ * could only have had one.
  */
 
 export type User = {
-  /** Stable key, and the directory name under `.data/users/`. */
+  /** Stable key, and the name of this user's folder on Drive. */
   id: string;
   /** What the person typed. Shown everywhere. */
   name: string;
-  /** Lowercase, hyphenated form of the name, used in the Drive folder name. */
+  /** Lowercase, hyphenated form of the name. */
   slug: string;
-  /**
-   * The folder on Drive holding this user's `input` and `output`.
-   *
-   * Resolved lazily and cached here: looking it up is three round trips and the
-   * answer never changes for a given user.
-   */
-  driveFolderId?: string;
+  /** This user's own folder, directly under the shared Drive root. */
+  driveFolderId: string;
   /** The folder's name on Drive: `<slug>-<id>`. Fixed at creation. */
   driveFolderName: string;
   createdAt: string;
   lastUsedAt?: string;
 };
 
-type Registry = {
-  users: User[];
-  /** Id of the user the app is currently working as. */
-  activeUserId?: string;
-};
+type Profile = { id: string; name: string; slug: string; createdAt: string; lastUsedAt?: string };
 
-const DIR = path.join(process.cwd(), ".data");
-const FILE = path.join(DIR, "users.json");
-
-const EMPTY: Registry = { users: [] };
-
-async function readRegistry(): Promise<Registry> {
-  try {
-    return JSON.parse(await readFile(FILE, "utf8")) as Registry;
-  } catch {
-    return EMPTY;
-  }
-}
-
-/** Same atomic write as `store.ts`: a half-written registry loses every user. */
-async function writeRegistry(value: Registry): Promise<void> {
-  await mkdir(DIR, { recursive: true });
-  const temp = `${FILE}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify(value, null, 2), "utf8");
-  await rename(temp, FILE);
-}
+const ACTIVE_USER_COOKIE = "do09_active_user";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Naming
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * A name reduced to something safe for a directory and a Drive folder.
+ * A name reduced to something safe for a Drive folder.
  *
  * Accents are folded rather than stripped, so "Hélène" becomes "helene" and not
  * "hlne". A name that reduces to nothing at all — punctuation, or a script this
@@ -92,36 +65,19 @@ export function slugify(name: string): string {
   return slug || "user";
 }
 
-/**
- * The unique half of the folder name.
- *
- * Time-ordered so a listing of the root folder sorts roughly by when each user
- * was added, with enough randomness that two people added in the same
- * millisecond do not collide.
- */
+/** The unique half of the folder name, time-ordered so listings sort roughly by age. */
 function uniqueId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Reading
- * ────────────────────────────────────────────────────────────────────────── */
-
-export async function listUsers(): Promise<User[]> {
-  const registry = await readRegistry();
-  return [...registry.users].sort(
-    (a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt),
-  );
-}
-
 /**
- * Recognise a name found on Drive that this machine has never heard of before.
+ * Recover a plausible name from a folder that has no `profile.json`.
  *
- * A workspace folder is `<slug>-<uniqueid>` — see `createUser`. The slug is
- * everything before the last hyphen-delimited chunk, which is deliberately
- * simple rather than parsed against `slugify`'s exact alphabet: a folder this
- * old may predate a change to that function, and a name is worth recovering
- * even from a folder this code did not itself create.
+ * A workspace folder is `<slug>-<uniqueid>`. The slug is everything before the
+ * last hyphen-delimited chunk — deliberately simple rather than parsed against
+ * `slugify`'s exact alphabet, because a folder this old may predate a change
+ * to that function, and a name is worth recovering even from one this code did
+ * not itself create.
  */
 function nameFromFolderName(folderName: string): string {
   const withoutId = folderName.replace(/-[a-z0-9]+$/i, "");
@@ -129,112 +85,102 @@ function nameFromFolderName(folderName: string): string {
   return words.map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || folderName;
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Reading
+ * ────────────────────────────────────────────────────────────────────────── */
+
 /**
- * Reconcile the local registry against what Drive actually holds.
+ * Every workspace that exists, read straight off Drive.
  *
- * The registry file lives on one machine; the folders on Drive are shared.
- * Opening this app from a different machine, or from a `.data` directory that
- * was wiped, must not show "no workspaces" while Drive is sitting on three
- * folders full of documents — those folders ARE the fact of who has a
- * workspace, and this is what makes a second machine see them.
+ * No local file backs this — the folders under the shared root are the list,
+ * so opening this app from a machine that has never touched a workspace
+ * before returns exactly what the machine that created one would see.
  *
- * Read-heavy and safe to call on every page load: it only writes when it finds
- * something new. A Drive read failure falls back to the local list rather than
- * wiping it — an outage must read as an outage, never as "there are no users".
+ * What IS kept, briefly, in memory: the result of the last scan, for a few
+ * seconds. This is not a store of anything the user typed — it is a debounce
+ * on top of `store.ts`'s design, and the reason it matters more here than it
+ * sounds: EVERY read and write in this app resolves "who is the active user"
+ * first, and that resolution is this exact scan — a folder listing plus one
+ * `profile.json` read per workspace. Without the debounce, a single screen
+ * that touches five collections pays for that scan five times over, and nine
+ * screens loading in sequence pay for it forty-five times over, for an answer
+ * that cannot possibly have changed between the first call and the last one
+ * a few hundred milliseconds later. `invalidateUsers()` clears it the moment
+ * anything that could change the answer actually happens.
  */
-export async function syncUsersFromDrive(): Promise<User[]> {
-  if (!driveConfigured()) return listUsers();
+let usersCache: { at: number; users: User[] } | null = null;
+const USERS_CACHE_MS = 15_000;
 
-  let folders: { id: string; name: string }[];
-  try {
-    folders = await listRootFolders();
-  } catch {
-    return listUsers();
-  }
+export function invalidateUsers(): void {
+  usersCache = null;
+}
 
-  const registry = await readRegistry();
-  const byFolderName = new Map(registry.users.map((user) => [user.driveFolderName, user]));
-  const users = [...registry.users];
-  let changed = false;
+async function scanUsers(): Promise<User[]> {
+  const folders = await listRootFolders();
+  const users: User[] = [];
 
   for (const folder of folders) {
-    const known = byFolderName.get(folder.name);
-    if (known) {
-      if (known.driveFolderId !== folder.id) {
-        known.driveFolderId = folder.id;
-        changed = true;
-      }
-      continue;
-    }
-
-    // A folder Drive has that this machine has never recorded. Read its
-    // profile if one was written; recover a plausible name from the folder
-    // name if not, and back-fill the profile so the NEXT machine to see this
-    // folder does not have to guess either.
-    let profile: { id: string; name: string; slug: string; createdAt: string } | undefined;
+    let profile: Profile | undefined;
     try {
       const file = await findInFolder(folder.id, "profile.json");
-      if (file) profile = JSON.parse(await readTextFile(file.id));
+      if (file) profile = JSON.parse(await readTextFile(file.id)) as Profile;
     } catch {
       profile = undefined;
     }
 
-    const recovered: User = profile
-      ? {
-          id: profile.id,
-          name: profile.name,
-          slug: profile.slug,
-          driveFolderId: folder.id,
-          driveFolderName: folder.name,
-          createdAt: profile.createdAt,
-        }
-      : {
-          id: folder.name,
-          name: nameFromFolderName(folder.name),
-          slug: slugify(nameFromFolderName(folder.name)),
-          driveFolderId: folder.id,
-          driveFolderName: folder.name,
-          createdAt: new Date().toISOString(),
-        };
-
-    users.push(recovered);
-    changed = true;
-
-    if (!profile) {
-      try {
-        await putJson(folder.id, "profile.json", {
-          id: recovered.id,
-          name: recovered.name,
-          slug: recovered.slug,
-          createdAt: recovered.createdAt,
-        });
-      } catch {
-        // The recovered name is still usable locally even if the write-back
-        // fails; the next machine simply has to recover it the same way.
-      }
+    if (profile) {
+      users.push({
+        id: profile.id,
+        name: profile.name,
+        slug: profile.slug,
+        driveFolderId: folder.id,
+        driveFolderName: folder.name,
+        createdAt: profile.createdAt,
+        lastUsedAt: profile.lastUsedAt,
+      });
+      continue;
     }
-  }
 
-  if (changed) await writeRegistry({ ...registry, users });
+    const name = nameFromFolderName(folder.name);
+    const recovered: Profile = { id: folder.name, name, slug: slugify(name), createdAt: new Date().toISOString() };
+    try {
+      await putJson(folder.id, "profile.json", recovered);
+    } catch {
+      // Still usable for this request even if the write-back fails; the next
+      // scan simply has to recover the name the same way again.
+    }
+    users.push({ ...recovered, driveFolderId: folder.id, driveFolderName: folder.name });
+  }
 
   return users.sort((a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt));
 }
 
+export async function listUsers(): Promise<User[]> {
+  if (!driveConfigured()) return [];
+
+  if (usersCache && Date.now() - usersCache.at < USERS_CACHE_MS) return usersCache.users;
+
+  const users = await scanUsers();
+  usersCache = { at: Date.now(), users };
+  return users;
+}
+
 export async function getUser(id: string): Promise<User | undefined> {
-  return (await readRegistry()).users.find((user) => user.id === id);
+  return (await listUsers()).find((user) => user.id === id);
 }
 
 /**
- * The user the app is working as, or nothing.
+ * The user this browser is working as, or nothing.
  *
- * Returning `undefined` rather than inventing a default is the point: a console
- * that silently picks somebody's workspace because none was chosen would show
- * one person's figures under another person's name.
+ * Returning `undefined` rather than inventing a default is the point: a
+ * console that silently picked somebody's workspace because none was chosen
+ * would show one person's figures under another person's name.
  */
 export async function activeUser(): Promise<User | undefined> {
-  const registry = await readRegistry();
-  if (!registry.activeUserId) return undefined;
-  return registry.users.find((user) => user.id === registry.activeUserId);
+  const store = await cookies();
+  const id = store.get(ACTIVE_USER_COOKIE)?.value;
+  if (!id) return undefined;
+  return getUser(id);
 }
 
 /** Throws with an actionable sentence rather than returning a placeholder. */
@@ -249,11 +195,6 @@ export async function requireActiveUser(): Promise<User> {
   return user;
 }
 
-/** Where this user's register lives on disk. */
-export function userDataDir(userId: string): string {
-  return path.join(DIR, "users", userId);
-}
-
 /* ────────────────────────────────────────────────────────────────────────────
  * Writing
  * ────────────────────────────────────────────────────────────────────────── */
@@ -264,77 +205,80 @@ export function userDataDir(userId: string): string {
  * Matching on the slug rather than the exact string, so "Helmi" and "helmi" are
  * one person. Creating a second workspace for a capitalisation difference would
  * split somebody's documents across two folders with nothing on screen saying
- * why half of them had vanished.
- *
- * Reconciled against Drive FIRST, not just the local registry. Checking local
- * data alone is exactly how this app once created a second, empty "Helmi"
- * folder for a name that already had thirty-nine documents on Drive: a machine
- * whose local registry has not yet learned about a name is not evidence the
- * name is new.
+ * why half of them had vanished. Checked against Drive directly — never a local
+ * list — because a local list is exactly what let this app once create a
+ * second, empty folder for a name that already had thirty-nine documents.
  */
 export async function createUser(name: string): Promise<{ user: User; created: boolean }> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A user needs a name.");
   if (trimmed.length > 60) throw new Error("That name is too long — 60 characters at most.");
+  if (!driveConfigured()) {
+    throw new Error(
+      "Drive is not connected, so a workspace cannot be created — there would be nowhere for it " +
+        "to live. Connect Drive first.",
+    );
+  }
 
   const slug = slugify(trimmed);
-  const known = await syncUsersFromDrive();
-
-  const existing = known.find((user) => user.slug === slug);
+  const existing = (await listUsers()).find((user) => user.slug === slug);
   if (existing) return { user: existing, created: false };
 
-  const registry = await readRegistry();
-
   const id = `${slug}-${uniqueId()}`;
-  const user: User = {
-    id,
-    name: trimmed,
-    slug,
-    // The folder name is the id. Two names that collide on Drive would be a
-    // nightmare to untangle, and the id already carries the uniqueness.
-    driveFolderName: id,
-    createdAt: new Date().toISOString(),
-  };
+  const createdAt = new Date().toISOString();
+  const rootId = driveEnv().folderId;
 
-  await writeRegistry({ ...registry, users: [...registry.users, user] });
-  await mkdir(userDataDir(id), { recursive: true });
+  const folderId = await ensureFolder(rootId, id);
+  await putJson(folderId, "profile.json", { id, name: trimmed, slug, createdAt });
+  // The three folders this user's workspace needs are created now rather than
+  // left to `workspace()` to discover lazily, so a brand-new workspace already
+  // looks complete the moment somebody opens Drive to check it.
+  await Promise.all([ensureFolder(folderId, "input"), ensureFolder(folderId, "output"), ensureFolder(folderId, "state")]);
+
+  const user: User = { id, name: trimmed, slug, driveFolderId: folderId, driveFolderName: id, createdAt };
+  invalidateUsers();
   return { user, created: true };
 }
 
+/**
+ * Switch the active workspace.
+ *
+ * Held in a cookie set on this response, never in a file on this server —
+ * there is nowhere here for "who is using this" to live. That also fixes a
+ * sharper problem than tidiness: a server-side file makes every browser
+ * talking to this instance share one active user, so switching workspaces in
+ * one tab silently switches it under someone working in another. A cookie is
+ * genuinely per-browser.
+ */
 export async function setActiveUser(id: string): Promise<User> {
-  const registry = await readRegistry();
-  const user = registry.users.find((row) => row.id === id);
+  const user = await getUser(id);
   if (!user) throw new Error(`No user with id ${id}.`);
 
-  const stamped: User = { ...user, lastUsedAt: new Date().toISOString() };
-  await writeRegistry({
-    users: registry.users.map((row) => (row.id === id ? stamped : row)),
-    activeUserId: id,
-  });
-  await mkdir(userDataDir(id), { recursive: true });
-  return stamped;
-}
+  const lastUsedAt = new Date().toISOString();
+  try {
+    await putJson(user.driveFolderId, "profile.json", {
+      id: user.id,
+      name: user.name,
+      slug: user.slug,
+      createdAt: user.createdAt,
+      lastUsedAt,
+    });
+  } catch {
+    // The switch below still succeeds even if this write fails; only the
+    // "last opened" ordering on the picker is affected, not which workspace
+    // opens.
+  }
 
-/** Record the Drive folder once it has been resolved, so it is found once. */
-export async function rememberDriveFolder(id: string, driveFolderId: string): Promise<void> {
-  const registry = await readRegistry();
-  await writeRegistry({
-    ...registry,
-    users: registry.users.map((row) => (row.id === id ? { ...row, driveFolderId } : row)),
+  const store = await cookies();
+  store.set(ACTIVE_USER_COOKIE, id, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    // A year. There is nothing sensitive in the cookie beyond which of this
+    // app's own workspaces was open last — it names a folder, not a secret.
+    maxAge: 60 * 60 * 24 * 365,
   });
-}
 
-/**
- * Forget a user's Drive folder id.
- *
- * Used when the root folder is repointed: the cached id then names a folder
- * inside a workspace nobody is using any more, and writing this user's results
- * into it would put them somewhere nothing reads.
- */
-export async function forgetDriveFolders(): Promise<void> {
-  const registry = await readRegistry();
-  await writeRegistry({
-    ...registry,
-    users: registry.users.map(({ driveFolderId: _drop, ...rest }) => rest),
-  });
+  invalidateUsers();
+  return { ...user, lastUsedAt };
 }

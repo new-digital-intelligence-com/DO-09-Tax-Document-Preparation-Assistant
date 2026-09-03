@@ -63,8 +63,7 @@ export async function GET(request: Request) {
   if (error) {
     return page(
       "Access was not granted",
-      `<p>Google returned <code>${error}</code>. Nothing was changed, and the app keeps working ` +
-        `against its local corpus.</p>`,
+      `<p>Google returned <code>${error}</code>. Nothing was changed.</p>`,
       "bad",
     );
   }

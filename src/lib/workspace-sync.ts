@@ -2,47 +2,35 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { record } from "./audit";
 import { classifyDocument, getClassification } from "./classify";
-import {
-  getDocument,
-  ingest,
-  listDocuments,
-  readDocumentBytes,
-  recordDriveFile,
-  removeLocalFile,
-} from "./documents";
-import {
-  downloadFile,
-  driveStatus,
-  findInFolder,
-  listFolder,
-  putFile,
-  putJson,
-  readTextFile,
-  workspace,
-} from "./drive";
-import { extractDocument, getExtraction } from "./extract";
+import { getDocument, ingestMany, listDocuments } from "./documents";
+import { downloadFile, driveStatus, findInFolder, listFolder, putJson, readTextFile, workspace } from "./drive";
+import { extractDocument } from "./extract";
 import { activePeriod, preparer } from "./settings";
 import { readStore, writeStore } from "./store";
 import type { Classification, Extraction, SourceDocument } from "./types";
 
 /**
- * The shared workspace on Drive, and the reason a second run is cheap.
+ * A per-document result cache on top of a store that already lives on Drive.
  *
- * Reading a document costs a model call per page and categorising it costs a
- * share of another. Doing that again for a document nobody has touched is pure
- * waste, and on a corpus of any size it is the difference between a sweep that
- * takes a minute and one that takes twenty.
+ * `store.ts` already reads and writes the period's register — documents,
+ * extractions, classifications — straight from Drive on every call; nothing
+ * in this app keeps a local copy of anything. This module adds one more thing
+ * on top of that: `output/<sha256>.json`, a cache keyed by the CONTENT of a
+ * document rather than by which period or which run produced it.
  *
- * So every result is written back to the `output` folder beside the `input`
- * that produced it, keyed by the SHA-256 of the file's bytes. The hash is the
- * right key rather than the filename or the Drive id: the same invoice saved
- * twice under two names is one document and should cost one reading, and a file
- * that was edited is a different document even though its name did not change.
+ * The reason that is worth a second file rather than just relying on the
+ * period register: reading a document costs a model call per page, and
+ * categorising it costs a share of another. A document already read once —
+ * in this period, in a different one, from a different machine's session —
+ * should never be paid for again, and content-hash keying is what makes that
+ * true regardless of which document row, which filename, or which period it
+ * turns up under next.
  *
- * What this deliberately does NOT cache is anything downstream of one document.
- * The exception list and the draft forms are computed over the
- * whole period and are cheap; caching them would mean a stale finding surviving
- * a change to the document it was raised against.
+ * What this deliberately does NOT cache is anything downstream of one
+ * document. The exception list and the draft forms are computed over the
+ * whole period from the register directly and are cheap to recompute; caching
+ * them here would mean a stale finding surviving a change to the document it
+ * was raised against.
  */
 
 /** Bumped when the shape of a cached result changes, so old ones are re-read. */
@@ -152,29 +140,51 @@ export async function writeCachedResult(result: CachedResult): Promise<boolean> 
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * Put a cached extraction and categorisation into the local register.
+ * Put cached extractions and categorisations into the register, in one write
+ * of each collection regardless of how many documents are being applied.
  *
  * The `docId` on a cached row belongs to whichever run first produced it, so
- * both are rewritten to this workspace's id. Without that the row is stored
- * against a document that does not exist here and every join downstream
- * silently drops it.
+ * every row is rewritten to this workspace's id before it goes in — without
+ * that, the row is stored against a document that does not exist here and
+ * every join downstream silently drops it.
+ *
+ * Called with one entry for a single document (`processDocument`'s cache hit)
+ * or with dozens at once (`hydrateFromDrive` catching a whole workspace up).
+ * Either way it costs one read and one write per collection, never one pair
+ * per document — the same reasoning as `ingestMany`, applied to the other
+ * place a bulk operation used to mean rewriting a growing register once per
+ * item.
  */
-async function applyCached(docId: string, cached: CachedResult): Promise<void> {
-  if (cached.extraction) {
-    const rows = await readStore<Extraction[]>("extractions", []);
-    const row: Extraction = { ...cached.extraction, docId };
-    await writeStore(
-      "extractions",
-      [...rows.filter((r) => r.docId !== docId), row].sort((a, b) => a.docId.localeCompare(b.docId)),
-    );
+async function applyCachedMany(rows: { docId: string; cached: CachedResult }[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const withExtraction = rows.filter((row): row is { docId: string; cached: CachedResult & { extraction: Extraction } } =>
+    Boolean(row.cached.extraction),
+  );
+  if (withExtraction.length > 0) {
+    const existing = await readStore<Extraction[]>("extractions", []);
+    const incoming = new Map(withExtraction.map((row) => [row.docId, { ...row.cached.extraction, docId: row.docId }]));
+    const next = [
+      ...existing.filter((row) => !incoming.has(row.docId)),
+      ...incoming.values(),
+    ].sort((a, b) => a.docId.localeCompare(b.docId));
+    await writeStore("extractions", next);
   }
-  if (cached.classification) {
-    const rows = await readStore<Classification[]>("classifications", []);
-    const row: Classification = { ...cached.classification, docId };
-    await writeStore(
-      "classifications",
-      [...rows.filter((r) => r.docId !== docId), row].sort((a, b) => a.docId.localeCompare(b.docId)),
+
+  const withClassification = rows.filter(
+    (row): row is { docId: string; cached: CachedResult & { classification: Classification } } =>
+      Boolean(row.cached.classification),
+  );
+  if (withClassification.length > 0) {
+    const existing = await readStore<Classification[]>("classifications", []);
+    const incoming = new Map(
+      withClassification.map((row) => [row.docId, { ...row.cached.classification, docId: row.docId }]),
     );
+    const next = [
+      ...existing.filter((row) => !incoming.has(row.docId)),
+      ...incoming.values(),
+    ].sort((a, b) => a.docId.localeCompare(b.docId));
+    await writeStore("classifications", next);
   }
 }
 
@@ -213,7 +223,7 @@ export async function processDocument(
   if (!options.force && driveReady) {
     const cached = await readCachedResult(doc.sha256, options.index);
     if (cached?.extraction) {
-      await applyCached(docId, cached);
+      await applyCachedMany([{ docId, cached }]);
       await record({
         actor,
         action: "document.reused",
@@ -372,8 +382,17 @@ export async function syncFromDrive(actor = preparer()): Promise<{
       .map((doc) => doc.sourceRef),
   );
   const skipped: { name: string; reason: string }[] = [];
-  let ingested = 0;
   let alreadyHeld = 0;
+
+  /**
+   * Every unfamiliar file's bytes are pulled down first, and NOTHING is
+   * written to the register until every one of them is in hand. That is what
+   * lets `ingestMany` turn what could be dozens of individual reads and
+   * rewrites of the register into exactly one of each — a sweep that finds
+   * forty new files no longer means reading and rewriting a growing register
+   * forty separate times.
+   */
+  const toIngest: Parameters<typeof ingestMany>[0] = [];
 
   for (const file of files) {
     if (file.mimeType === "application/vnd.google-apps.folder") continue;
@@ -402,7 +421,7 @@ export async function syncFromDrive(actor = preparer()): Promise<{
       continue;
     }
 
-    await ingest({
+    toIngest.push({
       filename: file.name,
       bytes,
       mimeType: file.mimeType,
@@ -412,9 +431,10 @@ export async function syncFromDrive(actor = preparer()): Promise<{
       periodId: period.id,
       actor,
     });
-    heldFileIds.add(file.id);
-    ingested++;
   }
+
+  await ingestMany(toIngest);
+  const ingested = toIngest.length;
 
   await record({
     actor,
@@ -432,255 +452,25 @@ export async function syncFromDrive(actor = preparer()): Promise<{
 }
 
 /**
- * Put a document into the Drive `input` folder.
+ * Bring a newly opened workspace's register up to date with Drive, at no cost.
  *
- * Called after an upload has been processed successfully, so the shared folder
- * accumulates every document the workspace has actually worked on and the next
- * run — from the app or from a Claude session — starts from the same corpus.
- * A document that was declined as out of scope is never uploaded: the folder is
- * the tax workspace, and putting somebody's holiday photo in it because they
- * dropped it on the page is exactly the data-minimisation failure the rules
- * warn about.
- */
-export async function pushDocumentToDrive(docId: string): Promise<{ stored: boolean; detail: string }> {
-  if (driveStatus().state !== "ready") {
-    return { stored: false, detail: "Drive is not connected, so the document stays local." };
-  }
-
-  const doc = await getDocument(docId);
-  if (!doc) return { stored: false, detail: `No document ${docId} on the register.` };
-
-  const folders = await workspace();
-
-  // Already there under this name and hash? Uploading again would give the
-  // folder two copies of one document and the corpus a duplicate finding that
-  // nobody caused.
-  const existing = await findInFolder(folders.inputId, doc.filename);
-  if (existing) {
-    try {
-      if (sha256Of(await downloadFile(existing.id)) === doc.sha256) {
-        // Present under this exact name and these exact bytes. The row may
-        // still not know it — e.g. it was pushed on an earlier run before this
-        // bookkeeping existed — so the id is recorded regardless of whether
-        // this call actually uploaded anything.
-        await recordDriveFile(docId, existing.id);
-        return { stored: true, detail: "Already in the Drive input folder." };
-      }
-    } catch {
-      // Fall through and upload under the same name; `putFile` replaces it.
-    }
-  }
-
-  const bytes = await readDocumentBytes(docId);
-  const uploaded = await putFile({
-    parentId: folders.inputId,
-    name: doc.filename,
-    bytes,
-    mimeType: doc.mimeType,
-  });
-
-  // Recorded so a later full sync — from this machine or a fresh one — knows
-  // this Drive file is the very same document rather than an unfamiliar
-  // arrival to be ingested a second time.
-  await recordDriveFile(docId, uploaded.id);
-
-  return { stored: true, detail: "Added to the Drive input folder." };
-}
-
-/**
- * Push what this workspace already holds up to Drive.
+ * Two gaps this closes, both real even though the register itself already
+ * lives on Drive rather than anywhere local.
  *
- * The backfill case, and it matters more than it sounds. A corpus collected and
- * read before Drive was connected exists only on this machine: the documents
- * are in the local register and their answers are in local JSON, and a Claude
- * session looking at the shared folder would see an empty workspace and
- * conclude the period had not been started.
+ * First: a file sitting in the Drive `input` folder is not automatically a
+ * row in `state/documents.json` — someone may have dropped it there directly,
+ * through Drive itself or a Gmail forward, without this app ever being asked
+ * to collect it. `syncFromDrive` is what turns "a file is in the folder" into
+ * "the register has a row for it".
  *
- * Nothing is re-read. Every document already has an extraction and most have a
- * categorisation, so this uploads the files and writes the answers that are
- * already on record. Paying for forty model calls to produce results that are
- * sitting on disk would be absurd, and worse, the second answers could differ
- * in wording from the ones the drafts were built from.
- */
-export async function publishToDrive(actor = preparer()): Promise<{
-  documents: number;
-  filesUploaded: number;
-  resultsWritten: number;
-  skipped: { filename: string; reason: string }[];
-}> {
-  const status = driveStatus();
-  if (status.state !== "ready") throw new Error(status.detail);
-
-  const period = await activePeriod();
-  const docs = await listDocuments({ periodId: period.id });
-  const skipped: { filename: string; reason: string }[] = [];
-  let filesUploaded = 0;
-  let resultsWritten = 0;
-
-  for (const doc of docs) {
-    const extraction = await getExtraction(doc.id);
-
-    // A document nobody has read yet is uploaded so the folder holds the
-    // corpus, but no result is written for it — an empty result file would be
-    // read back on the next run as "already processed, nothing found".
-    try {
-      const pushed = await pushDocumentToDrive(doc.id);
-      if (pushed.stored) filesUploaded++;
-      else skipped.push({ filename: doc.filename, reason: pushed.detail });
-    } catch (error) {
-      skipped.push({
-        filename: doc.filename,
-        reason: error instanceof Error ? error.message : "upload failed",
-      });
-      continue;
-    }
-
-    if (!extraction) continue;
-
-    try {
-      await writeCachedResult({
-        version: RESULT_VERSION,
-        sha256: doc.sha256,
-        filename: doc.filename,
-        source: doc.source,
-        sourceDetail: doc.sourceDetail,
-        processedAt: extraction.extractedAt,
-        processedBy: actor,
-        modelId: extraction.modelId,
-        extraction,
-        classification: await getClassification(doc.id),
-      });
-      resultsWritten++;
-    } catch (error) {
-      skipped.push({
-        filename: doc.filename,
-        reason: `result not written: ${error instanceof Error ? error.message : "unknown error"}`,
-      });
-    }
-  }
-
-  await record({
-    actor,
-    action: "drive.publish",
-    subject: period.id,
-    result: "ok",
-    detail:
-      `Published the local workspace to Drive: ${filesUploaded} document(s) uploaded and ` +
-      `${resultsWritten} stored result(s) written, out of ${docs.length} on the register.` +
-      (skipped.length ? ` ${skipped.length} skipped.` : ""),
-    periodId: period.id,
-  });
-
-  return { documents: docs.length, filesUploaded, resultsWritten, skipped };
-}
-
-/**
- * Drop the local copy of anything Drive already holds.
+ * Second: a document already read somewhere — a different period, a
+ * different session — has its answer sitting in `output/<sha256>.json`, but
+ * THIS period's `state/extractions.json` has no row pointing at it until
+ * something copies it across. That is what `applyCached` does here.
  *
- * Drive is the source. Keeping a second copy of every PDF on this machine makes
- * the workspace twice as large for no benefit, and worse, it makes it ambiguous
- * which copy is authoritative when they differ — a file replaced on Drive would
- * still preview from the stale local one and nothing would say so.
- *
- * The check before each delete is what makes this safe: the file is downloaded
- * from Drive and its hash compared against the register row, and only an exact
- * match is removed. A document Drive does not have, or has under different
- * bytes, keeps its local copy. Deleting the only copy of somebody's receipt to
- * save a few kilobytes is not a trade worth making.
- *
- * `/api/documents/[id]/file` already falls back to Drive, so the viewer keeps
- * working with nothing stored here at all.
- */
-export async function pruneLocalDocuments(actor = preparer()): Promise<{
-  checked: number;
-  removed: number;
-  bytesFreed: number;
-  kept: { filename: string; reason: string }[];
-}> {
-  const status = driveStatus();
-  if (status.state !== "ready") throw new Error(status.detail);
-
-  const period = await activePeriod();
-  const folders = await workspace();
-  const docs = await listDocuments({ periodId: period.id });
-
-  const onDrive = new Map(
-    (await listFolder(folders.inputId)).map((file) => [file.name, file]),
-  );
-
-  const kept: { filename: string; reason: string }[] = [];
-  let removed = 0;
-  let bytesFreed = 0;
-
-  for (const doc of docs) {
-    // No local copy is the goal state, not a problem.
-    try {
-      await readDocumentBytes(doc.id);
-    } catch {
-      continue;
-    }
-
-    const remote = onDrive.get(doc.filename);
-    if (!remote) {
-      kept.push({ filename: doc.filename, reason: "not in the Drive input folder" });
-      continue;
-    }
-
-    try {
-      const bytes = await downloadFile(remote.id);
-      if (sha256Of(bytes) !== doc.sha256) {
-        kept.push({
-          filename: doc.filename,
-          reason: "the copy on Drive has different bytes from the one on record",
-        });
-        continue;
-      }
-    } catch (error) {
-      kept.push({
-        filename: doc.filename,
-        reason: `could not be verified on Drive: ${
-          error instanceof Error ? error.message : "unknown error"
-        }`,
-      });
-      continue;
-    }
-
-    await removeLocalFile(doc.id);
-    removed++;
-    bytesFreed += doc.bytes;
-  }
-
-  await record({
-    actor,
-    action: "workspace.prune",
-    subject: period.id,
-    result: "ok",
-    detail:
-      `Removed ${removed} local document file(s) (${Math.round(bytesFreed / 1024)} KB) that Drive ` +
-      `holds byte-for-byte. ${kept.length} kept because they could not be verified there. The ` +
-      `register rows are untouched; the viewer reads those documents from Drive.`,
-    periodId: period.id,
-  });
-
-  return { checked: docs.length, removed, bytesFreed, kept };
-}
-
-/**
- * Pull in whatever this workspace already has on Drive, at no cost.
- *
- * The gap this closes: the picker can correctly recognise that a workspace
- * exists on Drive (`syncUsersFromDrive` in `users.ts` reads the folder even on
- * a machine that has never seen it before) — but recognising a workspace is
- * not the same as having its documents. A machine opening it for the first
- * time still has an empty local register, because nothing has pulled the
- * files and their answers down onto THIS disk yet. Without this step the
- * console reads "no documents collected" for a workspace that plainly has
- * thirty-nine of them, because it is asking the wrong question — "what is on
- * this machine" instead of "what is on Drive".
- *
- * It never calls the model. Anything with no cached answer in `output/` is
- * left unread rather than paid for on every machine a shared workspace is
- * opened from — that cost belongs to a deliberate Run, not to opening a tab.
+ * Neither step ever calls the model. Anything with no cached answer in
+ * `output/` is left unread rather than paid for every time a workspace is
+ * opened — that cost belongs to a deliberate Run, not to switching tabs.
  */
 export async function hydrateFromDrive(actor = preparer()): Promise<{ ingested: number; applied: number }> {
   if (driveStatus().state !== "ready") return { ingested: 0, applied: 0 };
@@ -702,14 +492,18 @@ export async function hydrateFromDrive(actor = preparer()): Promise<{ ingested: 
   ]);
   const alreadyRead = new Set(extractions.map((row) => row.docId));
 
-  let applied = 0;
+  // Every cache hit is collected before anything is written, so catching up
+  // a workspace with thirty-eight already-processed documents costs one read
+  // and one write of the register — not thirty-eight of each.
+  const toApply: { docId: string; cached: CachedResult }[] = [];
   for (const doc of docs) {
     if (alreadyRead.has(doc.id)) continue;
     const cached = await readCachedResult(doc.sha256, index);
     if (!cached?.extraction) continue;
-    await applyCached(doc.id, cached);
-    applied++;
+    toApply.push({ docId: doc.id, cached });
   }
+  await applyCachedMany(toApply);
+  const applied = toApply.length;
 
   if (ingested > 0 || applied > 0) {
     await record({
