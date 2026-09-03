@@ -1,5 +1,6 @@
 import { activeUser, setActiveUser } from "@/lib/users";
 import { forgetWorkspace } from "@/lib/drive";
+import { hydrateFromDrive } from "@/lib/workspace-sync";
 import { bad, body, failed, ok, str } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -19,6 +20,13 @@ export async function GET() {
  * this is belt and braces rather than a correctness fix — but a stale entry
  * here would write one person's results into another person's folder, and that
  * is the one failure in this app worth two lines of insurance.
+ *
+ * `hydrateFromDrive` runs right after: a workspace the picker found on Drive
+ * may still be a blank slate on THIS machine — nothing has pulled its
+ * documents and their answers down onto this disk yet. Without it, switching
+ * to a workspace that plainly has documents on Drive shows an empty console
+ * until somebody happens to press Run. It costs nothing beyond Drive traffic —
+ * no model call is ever made here.
  */
 export async function POST(request: Request) {
   try {
@@ -28,7 +36,8 @@ export async function POST(request: Request) {
 
     const user = await setActiveUser(id);
     forgetWorkspace();
-    return ok({ active: user });
+    const pulled = await hydrateFromDrive(user.name);
+    return ok({ active: user, pulled });
   } catch (error) {
     if (error instanceof Error && /No user with id|must be a JSON/.test(error.message)) {
       return bad(error.message);

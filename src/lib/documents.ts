@@ -327,6 +327,24 @@ export async function removeLocalFile(id: string): Promise<void> {
   await rm(await fileFor(doc), { force: true });
 }
 
+/**
+ * Record which Drive file a document became, once it has been pushed there.
+ *
+ * Without this, a document ingested by upload and later pushed to the input
+ * folder has no `sourceRef` — the row still says how it arrived, not where it
+ * now also lives. A later full sync from a machine with no local copy of that
+ * document would then see it in the input folder as an unfamiliar file and
+ * ingest it a second time, turning one upload into two rows of the same
+ * invoice. `source` is left as it was; only where the file can now be found
+ * changes.
+ */
+export async function recordDriveFile(id: string, driveFileId: string): Promise<void> {
+  await mutate<SourceDocument[], void>("documents", [], (docs) => ({
+    next: docs.map((doc) => (doc.id === id ? { ...doc, sourceRef: driveFileId } : doc)),
+    result: undefined,
+  }));
+}
+
 export async function documentViews(periodId: string): Promise<DocumentView[]> {
   const [docs, extractions, classifications, exceptions] = await Promise.all([
     listDocuments({ periodId }),

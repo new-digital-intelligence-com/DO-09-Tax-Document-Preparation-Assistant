@@ -7,6 +7,7 @@ import {
   ingest,
   listDocuments,
   readDocumentBytes,
+  recordDriveFile,
   removeLocalFile,
 } from "./documents";
 import {
@@ -354,13 +355,33 @@ export async function syncFromDrive(actor = preparer()): Promise<{
   const folders = await workspace();
   const files = await listFolder(folders.inputId);
 
-  const held = new Set((await listDocuments({ periodId: period.id })).map((d) => d.sha256));
+  // Identity for "have I already synced this Drive file" is the Drive file's
+  // OWN id, never the content hash. Content hash is the wrong key here: two
+  // input files can legitimately hold identical bytes — the same invoice
+  // uploaded twice by mistake — and that is exactly the case this app exists
+  // to catch, not to silently collapse. A hash-keyed check ingests the first
+  // copy, remembers its hash, and then skips the second copy as "already
+  // held" within the very same pass, which is how a real duplicate quietly
+  // vanishes before the duplicate-document exception ever gets a chance to
+  // see it. Keying on the Drive file id instead means every distinct file in
+  // the folder is ingested once, and it is `documents.ts` / `exceptions.ts`
+  // — not this sweep — that decides two of them are suspiciously alike.
+  const heldFileIds = new Set(
+    (await listDocuments({ periodId: period.id }))
+      .filter((doc) => doc.sourceRef)
+      .map((doc) => doc.sourceRef),
+  );
   const skipped: { name: string; reason: string }[] = [];
   let ingested = 0;
   let alreadyHeld = 0;
 
   for (const file of files) {
     if (file.mimeType === "application/vnd.google-apps.folder") continue;
+
+    if (heldFileIds.has(file.id)) {
+      alreadyHeld++;
+      continue;
+    }
 
     if (!DOCUMENT_TYPES.has(file.mimeType)) {
       skipped.push({
@@ -381,11 +402,6 @@ export async function syncFromDrive(actor = preparer()): Promise<{
       continue;
     }
 
-    if (held.has(sha256Of(bytes))) {
-      alreadyHeld++;
-      continue;
-    }
-
     await ingest({
       filename: file.name,
       bytes,
@@ -396,7 +412,7 @@ export async function syncFromDrive(actor = preparer()): Promise<{
       periodId: period.id,
       actor,
     });
-    held.add(sha256Of(bytes));
+    heldFileIds.add(file.id);
     ingested++;
   }
 
@@ -443,6 +459,11 @@ export async function pushDocumentToDrive(docId: string): Promise<{ stored: bool
   if (existing) {
     try {
       if (sha256Of(await downloadFile(existing.id)) === doc.sha256) {
+        // Present under this exact name and these exact bytes. The row may
+        // still not know it — e.g. it was pushed on an earlier run before this
+        // bookkeeping existed — so the id is recorded regardless of whether
+        // this call actually uploaded anything.
+        await recordDriveFile(docId, existing.id);
         return { stored: true, detail: "Already in the Drive input folder." };
       }
     } catch {
@@ -451,12 +472,17 @@ export async function pushDocumentToDrive(docId: string): Promise<{ stored: bool
   }
 
   const bytes = await readDocumentBytes(docId);
-  await putFile({
+  const uploaded = await putFile({
     parentId: folders.inputId,
     name: doc.filename,
     bytes,
     mimeType: doc.mimeType,
   });
+
+  // Recorded so a later full sync — from this machine or a fresh one — knows
+  // this Drive file is the very same document rather than an unfamiliar
+  // arrival to be ingested a second time.
+  await recordDriveFile(docId, uploaded.id);
 
   return { stored: true, detail: "Added to the Drive input folder." };
 }
@@ -637,6 +663,69 @@ export async function pruneLocalDocuments(actor = preparer()): Promise<{
   });
 
   return { checked: docs.length, removed, bytesFreed, kept };
+}
+
+/**
+ * Pull in whatever this workspace already has on Drive, at no cost.
+ *
+ * The gap this closes: the picker can correctly recognise that a workspace
+ * exists on Drive (`syncUsersFromDrive` in `users.ts` reads the folder even on
+ * a machine that has never seen it before) — but recognising a workspace is
+ * not the same as having its documents. A machine opening it for the first
+ * time still has an empty local register, because nothing has pulled the
+ * files and their answers down onto THIS disk yet. Without this step the
+ * console reads "no documents collected" for a workspace that plainly has
+ * thirty-nine of them, because it is asking the wrong question — "what is on
+ * this machine" instead of "what is on Drive".
+ *
+ * It never calls the model. Anything with no cached answer in `output/` is
+ * left unread rather than paid for on every machine a shared workspace is
+ * opened from — that cost belongs to a deliberate Run, not to opening a tab.
+ */
+export async function hydrateFromDrive(actor = preparer()): Promise<{ ingested: number; applied: number }> {
+  if (driveStatus().state !== "ready") return { ingested: 0, applied: 0 };
+
+  let ingested = 0;
+  try {
+    ingested = (await syncFromDrive(actor)).ingested;
+  } catch {
+    // An unreadable Drive is surfaced on the Workspace screen's own status
+    // strip; switching workspaces must not throw over it.
+    return { ingested: 0, applied: 0 };
+  }
+
+  const period = await activePeriod();
+  const [docs, extractions, index] = await Promise.all([
+    listDocuments({ periodId: period.id }),
+    readStore<Extraction[]>("extractions", []),
+    outputIndex().catch(() => undefined),
+  ]);
+  const alreadyRead = new Set(extractions.map((row) => row.docId));
+
+  let applied = 0;
+  for (const doc of docs) {
+    if (alreadyRead.has(doc.id)) continue;
+    const cached = await readCachedResult(doc.sha256, index);
+    if (!cached?.extraction) continue;
+    await applyCached(doc.id, cached);
+    applied++;
+  }
+
+  if (ingested > 0 || applied > 0) {
+    await record({
+      actor,
+      action: "workspace.hydrate",
+      subject: period.id,
+      result: "ok",
+      detail:
+        `Opened this workspace on a machine with no local copy of it: pulled in ${ingested} ` +
+        `document(s) from Drive and applied ${applied} already-processed result(s) from the output ` +
+        `folder. No model call was made.`,
+      periodId: period.id,
+    });
+  }
+
+  return { ingested, applied };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

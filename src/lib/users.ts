@@ -265,6 +265,12 @@ export function userDataDir(userId: string): string {
  * one person. Creating a second workspace for a capitalisation difference would
  * split somebody's documents across two folders with nothing on screen saying
  * why half of them had vanished.
+ *
+ * Reconciled against Drive FIRST, not just the local registry. Checking local
+ * data alone is exactly how this app once created a second, empty "Helmi"
+ * folder for a name that already had thirty-nine documents on Drive: a machine
+ * whose local registry has not yet learned about a name is not evidence the
+ * name is new.
  */
 export async function createUser(name: string): Promise<{ user: User; created: boolean }> {
   const trimmed = name.trim();
@@ -272,10 +278,12 @@ export async function createUser(name: string): Promise<{ user: User; created: b
   if (trimmed.length > 60) throw new Error("That name is too long — 60 characters at most.");
 
   const slug = slugify(trimmed);
-  const registry = await readRegistry();
+  const known = await syncUsersFromDrive();
 
-  const existing = registry.users.find((user) => user.slug === slug);
+  const existing = known.find((user) => user.slug === slug);
   if (existing) return { user: existing, created: false };
+
+  const registry = await readRegistry();
 
   const id = `${slug}-${uniqueId()}`;
   const user: User = {
