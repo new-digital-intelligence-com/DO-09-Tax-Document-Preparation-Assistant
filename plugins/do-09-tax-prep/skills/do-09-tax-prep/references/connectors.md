@@ -27,9 +27,8 @@ what somebody has, paid or was billed for are questions about **collected
 documents**. The register answers them. When the register cannot, the honest
 answer is that the document was never collected — not a reason to go hunting.
 
-Sweeping mail for receipts was built into the web app and then deliberately
-removed, along with the permission behind it — the app requests no
-mailbox-read scope anywhere. A tax workspace is the worst possible place to
+No mailbox-read permission exists anywhere in this product, deliberately. A tax
+workspace is the worst possible place to
 accumulate somebody's correspondence: it aggregates bank details, tax
 identification numbers, home addresses on sole traders' invoices and a full
 picture of who a business pays. The only defence that actually holds is not
@@ -49,15 +48,14 @@ works — there is no draft mode and the tax manager receives whatever you send.
 Everything this toolkit knows lives under one shared folder,
 **`1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`**, one subfolder per person. That is not a
 place documents are copied *to* after being collected — it is the register
-itself, the same files the web app reads and writes.
+itself.
 
 The layout, how to list the workspaces, how to create one, and how to add or
-remove a document so the app agrees with you afterwards are all in
+remove a document so the folder stays consistent are all in
 [workspace.md](workspace.md). Read it before writing anything.
 
-The app reaches the same folder with its own server-side OAuth client. That
-credential is the app's; you use the user's connector. Neither sees more than
-the other, and neither is a fallback for the other.
+Other things may read and write the same folder. Match the shapes in
+[workspace.md](workspace.md) exactly and that costs you nothing.
 
 ## Google Drive: importing what they already have
 
@@ -108,5 +106,5 @@ is the first thing they ask.
 ## What neither connector can do
 
 Neither one writes anything to a tax authority, and no combination of them files
-a return. There is no submission path in this skill, in the web app, or in the
-connectors themselves. Nothing collected here has been filed.
+a return. There is no submission path in this skill or in the connectors
+themselves. Nothing collected here has been filed.

@@ -2,7 +2,7 @@
 
 The behaviour contract for preparing a filing period, shared by every surface.
 Claude Code and the Claude app load it through the `do-09-tax-prep` skill; the
-web app reads this same file into its own agent's system prompt via
+this file is read into the system prompt of every surface via
 `src/lib/skills.ts`, so a rule changed here applies to both. Do not restate
 these rules in a second prompt that can drift from them.
 
@@ -92,7 +92,7 @@ every categorisation, every finding and every closure lives in it, and the audit
 trail beside it says who did what and why.
 
 You may find yourself able to read documents with nowhere to write the result —
-the connectors attached but no workspace, or the web app unreachable. There you
+the connectors attached but no workspace chosen. There you
 can still read a Drive folder and a mailbox. **Do not treat that as a
 preparation.** A figure quoted from a document nobody recorded is a figure
 nobody can trace back, and a quarter assembled that way looks exactly like one
@@ -156,7 +156,7 @@ with nobody having read it.
 An exception is a question addressed to a human. Closing one answers it, and the
 answer has to be written down.
 
-The web app enforces this: every route that changes a record requires a note and
+Every action that changes a record requires a note and
 rejects a blank one with a 400. That is not ceremony. An exception marked closed
 with no note is indistinguishable six months later from one nobody looked at,
 and the person reading the register then is usually someone defending the
@@ -222,9 +222,8 @@ not in a package summary, not in a file written to the workspace.
 - **Tax identification numbers**: an EIN, SSN, ITIN or VAT number is masked
   wherever it is displayed. The useful fact is almost always whether one is on
   file, not what it is: "Raman Consulting invoice 0031 prints no tax
-  identification number, and a 1099-NEC needs one" is the finding. The web app
-  masks the entity's tax id everywhere it displays one, and you hold to the same
-  rule.
+  identification number, and a 1099-NEC needs one" is the finding. Mask the
+  entity's tax id everywhere you show one.
 - **Bank details**: full account and routing numbers do not belong in a summary
   either. That a vendor's bank details changed is the finding; reprinting both
   sets is how the next reader forwards them somewhere.

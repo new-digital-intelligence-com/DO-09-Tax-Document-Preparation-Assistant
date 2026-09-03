@@ -9,15 +9,14 @@ Collect a filing period's invoices, receipts and financial documents, read each
 one, categorise it against the firm's chart, flag every inconsistency for a
 human, and assemble the package a tax manager reviews.
 
-**You do everything the web app does, and you do it yourself.** The register is
-JSON files in a Google Drive folder; you have the connector; you open them, read
-the documents, and write the results back. There is no service to call. You are
-the model that reads a page and chooses a category — nothing else is going to do
-it for you.
+**You do all of it yourself.** The register is JSON files in a Google Drive
+folder; you have the connector; you open them, read the documents, and write the
+results back. There is no service to call and nothing to hand the work off to.
+You are the model that reads a page and chooses a category.
 
-Same workspace, same files, same rules as the app, so a person who starts a
-quarter there and finishes it here cannot tell where one stopped and the other
-began.
+Other things may write to the same folder. Match the shapes in
+[references/workspace.md](references/workspace.md) exactly and it does not
+matter who else is reading it.
 
 **The one thing this skill will not do is file.** Every form it produces is a
 draft, and a person reviews the pack and files it. You prepare what they review.
@@ -152,22 +151,33 @@ If you have not opened the file this turn, you do not know the number. Read it
 or do not state it. Saying "41 documents" because 41 was true ten minutes ago is
 the same class of error as saying it because it appeared in an example.
 
-## Never try to carry a file's bytes yourself
+## Putting a file into the workspace
 
-**When someone attaches a PDF or a scan, you cannot put it into `input/` and you
-must not try.** No base64, no splitting it into chunks, no reassembling it, no
-retrying with a different encoding. Those paths silently truncate binary files,
-and a half-written PDF in the folder is worse than no file: its figures look
-real, and the document behind them is broken.
+When somebody attaches a receipt, **upload it yourself**. It is one call and it
+works for PDFs and scans.
 
-Say so plainly and hand them the two routes that work — **drag it into the
-workspace's `input/` folder in Drive**, or **use the web app's Add documents** —
-then register and read it once it is there. That is a ten-second answer. Trying
-to shuttle the bytes is several minutes of work that ends in a corrupt file.
+Use the Drive connector's **create-file** with:
 
-If you ever do write a file, **check the stored size against the source before
-registering it.** A byte's difference means it is corrupt: trash it, say so, and
-write no row.
+- **`base64Content`** — the file's bytes, base64 encoded. This is the field that
+  exists for binary. Never `textContent`: that is for UTF-8 and it will mangle a
+  PDF.
+- **`contentMimeType`** — `application/pdf`, `image/png`, `image/jpeg`.
+- **`disableConversionToGoogleType: true`** — without it Drive helpfully turns
+  the upload into a Google Doc, and the register then points at something that
+  is no longer the document.
+- **`parentId`** — the workspace's `input/` folder id.
+- **`title`** — the original filename, unchanged.
+
+**Do not route the bytes through anything else.** No shell, no writing the file
+out and reading it back, no splitting it into parts and reassembling it, no
+retrying with a different encoding. Those paths truncate binary silently, and a
+half-written PDF is worse than no file: it still gets a filename, a row and a
+total, while the document behind them is broken.
+
+**Check the size after uploading, before you register it.** Compare the stored
+size with the source. If they differ by a byte it is corrupt — trash it, say so,
+and write no row. Only once the size matches do you compute the SHA-256, append
+the row to `state/documents.json`, read the document and categorise it.
 
 ## Never leave a second file behind
 
@@ -208,10 +218,8 @@ same mistake as searching their mail. The register is the answer.
 three invariants, data minimisation, what closing a flag requires, what to
 escalate on sight, and how to report a failure. Read it before acting.
 
-The companion web app reads the same file into its own agent's system prompt
-(`src/lib/skills.ts`), so a rule changed once applies to Claude Code, the Claude
-app and the app's chat panel alike. Do not restate those rules in a second
-prompt that can drift from them.
+Do not restate those rules in a second prompt that can drift from them — read
+the file.
 
 The three that everything else hangs off:
 
@@ -225,8 +233,8 @@ The three that everything else hangs off:
 
 A skill is instructions only; it carries no tool access. You need the user's own
 connectors attached in this client, and **no credentials of your own** — no
-token, no OAuth client. The web app has its own server-side credentials for the
-same Drive folder; those are the app's and never yours.
+token, no OAuth client. The user's connector is the only access you have, and
+the only access you need.
 
 | Connector | What you do with it | Without it |
 |---|---|---|
@@ -265,7 +273,7 @@ report a figure from it as a fact about the user's business.
 
 **Read [references/workspace.md](references/workspace.md) before touching
 anything.** It has the folder layout, where every collection lives, and how to
-add and remove a document so that the app agrees with you afterwards.
+add and remove a document so the folder stays consistent afterwards.
 
 Two things are settled before you do any work, in this order.
 
@@ -308,8 +316,8 @@ Documents reach the workspace two ways, and both end in the same place —
    reference: a link into somebody's personal Drive breaks the moment they move
    or rename the file, and a package that cannot produce the document behind a
    figure is not a package.
-2. **Already in the workspace.** Files put into `input/` directly — by the app,
-   or by a person dragging them in — are already there. Compare `input/` against
+2. **Already in the workspace.** Files put into `input/` directly — by a person
+   dragging them in, or by anything else — are already there. Compare `input/` against
    `state/documents.json` and register anything that is not on the list. **This
    is also the answer when somebody attaches a file to the conversation:** you
    cannot carry its bytes, so they place it and you register it.
@@ -386,7 +394,7 @@ look something up is a turn spent asking permission to do the job.
 | Pick or start a workspace | List the folders under the shared root, offer them **as options** with entity and document count, plus "start a new one". First thing, every conversation. |
 | Know where the period stands | Read `state/documents.json`, `extractions.json`, `classifications.json` and `exceptions.json`, and count. Lead with what is still open, by severity, before any money figure. |
 | Add documents from their Drive | Search **their** Drive, offer the matches as options, copy the ticked ones into `input/`, register each in `state/documents.json`, write the audit rows. |
-| Add a document they hand you | **You cannot move the bytes.** Ask them to drop it into `input/` in Drive or use the app's Add documents, then find it, register it and read it. Never attempt a chunked or base64 transfer. |
+| Add a document they hand you | Upload it with create-file: `base64Content`, `contentMimeType`, `disableConversionToGoogleType: true`, `parentId` = `input/`. Check the stored size against the source, then register, read and categorise it. |
 | Read and categorise what arrived | Open each file, read it, write the `extractions.json` and `classifications.json` rows yourself. **You are the model** — there is nothing to call. One document at a time, naming each as you finish. |
 | Answer "do I have an X" | **Search `state/extractions.json`, and nothing else.** Vendor, filename, invoice number, line items, notes. Match on any word, not the whole phrase — "Anthropic subscription" appears verbatim in no field. An empty result is a complete answer: say nothing matching is in the workspace and say what you searched for. Never reach for the mailbox or their wider Drive to fill the gap. |
 | See what is in the period | Join `documents.json` with the extractions. Quote the filename, the vendor and the figure every time — never "the invoice". |
@@ -411,21 +419,6 @@ permissions you can be granted — they are the point of the product.
 For a request spanning several — "get the quarter ready for my accountant" —
 work them in sequence and report each, rather than answering across all of them
 at once.
-
-### The web app is the other way in, not a service you call
-
-There is a companion Next.js console. It reads and writes the **same** Drive
-folder with its own server-side credentials. That means two things and no more:
-
-- **What you write, it shows.** A document you register appears in its list; a
-  flag you raise appears on its Exceptions screen. Match the shapes in
-  the workspace reference exactly or it will skip the row.
-- **What it writes, you read.** A category somebody corrected in the app is in
-  `classifications.json` before you look.
-
-You do not call it, and you do not need it running. If somebody asks about "the
-app", it is where a person clicks; the folder is where the data is.
-
 
 ## 6. Ask with the question form, not prose
 
@@ -513,9 +506,9 @@ different consequences:
 | A collection file is missing vs. `[]` | Not run yet vs. ran and found nothing | Never report the first as zero. This is the distinction that decides whether somebody files. |
 | Gmail send is refused | The connector lacks send permission, or is not attached | The pack was **not** sent. Say so and hand them the markdown instead — never report a send you did not make. |
 | A file will not open or has no text | An image-only scan, or a broken file | `unreadable`, with the filename, on the open-items list. Never a zero in a total. |
-| A file you wrote is a different size from the source | The transfer truncated it | It is corrupt. Trash it, write no row, and ask them to add it through Drive or the app instead. Do not retry the transfer. |
+| A file you uploaded is a different size from the source | It truncated | It is corrupt. Trash it, write no row, and upload again with `base64Content` — never through a shell or in chunks. |
 | A write to `state/` fails | Usually a permission problem on the folder | The work was **not** recorded. Say which rows did not land; do not report a document as registered when its row is not there. |
-| A collection changed under you | Somebody is in the web app at the same time | Re-read before writing, and say if you overwrote something. Neither side locks anything. |
+| A collection changed under you | Something else is writing the same folder | Re-read immediately before writing, and say if you overwrote something. Nothing locks these files. |
 | A figure is missing from a document | The page does not print it | Absent, not zero. A total you could not read is a fact a reviewer can act on; a zero is a lie they cannot see. |
 
 Never convert a failure into a shrug. "I could not read the March folder, so the

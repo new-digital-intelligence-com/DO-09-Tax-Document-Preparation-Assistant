@@ -1,9 +1,8 @@
 # The workspace on Google Drive
 
-Everything this toolkit knows lives in **one shared Google Drive folder**, and
-both surfaces — the web app and this skill — read and write the same folder. A
-document uploaded in the app is a document you can read here; a category you
-record here is one the app shows on its next load. There is no second register.
+Everything this toolkit knows lives in **one shared Google Drive folder**. That
+folder is the register — there is no database behind it and no second copy
+anywhere. What you write there is the state; what is there is the truth.
 
 **Root folder id: `1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`** — this one value is real
 configuration. It is the only literal in this file you should ever use as-is.
@@ -14,10 +13,9 @@ configuration. It is the only literal in this file you should ever use as-is.
 > real values out of the real files, every time; repeating one of these as
 > though it were a fact is inventing one.
 
-You reach it with **the user's own Google Drive connector**. You have no
-credentials of your own and need none — the app has its own OAuth client for its
-own server, and that is not yours to use. If the connector is not attached, say
-so and stop; do not fall back to a local corpus and present it as their data.
+You reach it with **the user's own Google Drive connector**. That is your only
+access and all you need. If it is not attached, say so and stop; never fall back
+to a local corpus and present it as their data.
 
 ## Layout
 
@@ -154,31 +152,35 @@ Say which of the two you are looking at whenever the answer is "nothing".
 
 ## Adding a document
 
-### You do not move binary files. Get the bytes there another way.
+### Uploading a file somebody attached
 
-**A PDF or a scan attached to the conversation cannot be reliably written into
-`input/` by you, and you must not try.** Do not base64 it, do not split it into
-chunks and reassemble it, do not "retry the transfer", do not write it through a
-shell and hope. Every one of those paths silently truncates a binary file, and a
-half-written PDF in `input/` is worse than no file at all: the register's
-figures are only trustworthy because the document behind them is sitting there
-intact, and a truncated one still has a filename, a row and a total.
+**Upload it yourself. It is one call.** Use the Drive connector's create-file
+with:
 
-When someone attaches a receipt and asks you to add it, say plainly that you
-cannot put the bytes there yourself, and give them the two routes that work:
+| Field | Value |
+|---|---|
+| `base64Content` | the file's bytes, base64 encoded — **this is the binary field** |
+| `contentMimeType` | `application/pdf`, `image/png`, `image/jpeg` |
+| `disableConversionToGoogleType` | `true` |
+| `parentId` | the workspace's `input/` folder id |
+| `title` | the original filename, unchanged |
 
-- **Drop it into the workspace's `input/` folder in Drive.** They already have
-  the folder open; it takes one drag. This is the reliable one.
-- **Use the web app's "Add documents".** It uploads the bytes server-side and
-  registers and reads the document in one step.
+`textContent` is for UTF-8 and will mangle a PDF. `disableConversionToGoogleType`
+matters more than it looks: without it Drive converts the upload into a Google
+Doc, and the register then points at something that is no longer the document.
 
-Then do your half: find the new file in `input/`, register it, and read it.
-Offer that as the next step rather than leaving them holding a file.
+**Do not route the bytes through anything else** — no shell, no writing the file
+out and reading it back, no splitting it into parts and reassembling them, no
+retrying with a different encoding. Those truncate binary silently.
 
-**If you ever do write a file, verify it before registering it.** Compare the
-stored size against the source. If they differ by a byte, the file is corrupt —
-trash it, say so, and do not write a row. Never register a document you have not
-confirmed arrived whole.
+**Check the stored size against the source before registering it.** A byte's
+difference means it is corrupt: trash it, say so, and write no row. A
+half-written PDF is worse than no file, because it still gets a filename, a row
+and a total while the document behind them is broken.
+
+If an upload genuinely fails twice for a reason you cannot fix, say what
+happened and ask them to drag the file into `input/`. Then carry on from there —
+that is the section below.
 
 ### Registering a file that is already in `input/`
 
@@ -266,8 +268,8 @@ Say that you saved it, and where. Never claim it if the write failed.
 
 You are the model here. There is no service to call to have a document read for
 you — you open the PDF through the connector, read it, and write the result into
-the register yourself. What follows are the exact shapes, because the web app
-reads these same files and a row in the wrong shape is a row it silently ignores.
+the register yourself. What follows are the exact shapes: a row in the wrong
+shape is a row that anything else reading this folder will silently ignore.
 
 ### `state/extractions.json` — one per document
 
@@ -406,8 +408,7 @@ Never reuse an id and never renumber an existing one.
 
 ## Two processes, one folder
 
-The web app writes these same files with its own credentials, and neither side
-locks anything. If somebody is using the app while you are working, you can both
+Something else may write these same files, and nothing locks them. If somebody is using the app while you are working, you can both
 read a collection, both write it, and the second write discards the first.
 
 The window is a second or so and there is no fix available in a
