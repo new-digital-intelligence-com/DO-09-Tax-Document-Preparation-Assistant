@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Confidence,
+  Confirm,
   Drawer,
   Empty,
   ErrorNote,
@@ -28,6 +29,21 @@ import { effectiveCategoryId, type DocumentView } from "@/lib/types";
 type Filter = "all" | "unread" | "unreadable" | "review" | "flagged";
 
 /**
+ * One file's journey through an upload, as the console shows it.
+ *
+ * `queued` is a distinct stage from `reading` on purpose. Documents are read
+ * one at a time, so showing five rows all saying "reading" would be a picture
+ * of something that is not happening — four of them are waiting. The point of
+ * this list is to say truthfully where each file is.
+ */
+type Progress = {
+  filename: string;
+  stage: "uploading" | "queued" | "reading" | "done";
+  status?: string;
+  detail?: string;
+};
+
+/**
  * The corpus.
  *
  * The column that decides whether this screen is honest is the amount: a
@@ -44,6 +60,8 @@ export function DocumentsPanel() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress[]>([]);
+  const [deleting, setDeleting] = useState<DocumentView | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -87,26 +105,116 @@ export function DocumentsPanel() {
     }
   }
 
+  /**
+   * Upload, then walk each document through reading, one at a time.
+   *
+   * The progress list is the point. A single request that uploaded and read
+   * everything before replying meant a minute of nothing — no way to tell
+   * whether the files had arrived, where they went, or whether anything was
+   * happening at all. Now each file appears the moment its bytes are on
+   * Drive, and its row changes as it is read.
+   */
   async function upload(files: FileList | null) {
     if (!files?.length) return;
+
+    const names = Array.from(files).map((file) => file.name);
     setBusy("Upload");
+    setError("");
     setNote("");
+    setProgress(names.map((filename) => ({ filename, stage: "uploading" })));
+
     try {
       const form = new FormData();
       for (const file of Array.from(files)) form.append("file", file);
+
       const response = await fetch("/api/documents", { method: "POST", body: form });
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error ?? `Upload responded ${response.status}.`);
-      setNote(
-        value.note ??
-          `${value.ingested} added. Run extraction to read them — nothing is read on upload.`,
-      );
+
+      const uploaded: { id: string; filename: string }[] = value.documents ?? [];
+      setProgress(uploaded.map((row) => ({ filename: row.filename, stage: "queued" })));
+      if (value.note) setNote(value.note);
+
+      // The list is already visible at this point, so refreshing it now means
+      // the documents show up before any of them has been read — which is the
+      // answer to "where did my file go".
       await load();
+
+      for (const [index, row] of uploaded.entries()) {
+        setProgress((current) =>
+          current.map((entry, i) => (i === index ? { ...entry, stage: "reading" } : entry)),
+        );
+        try {
+          const result = await fetch(`/api/documents/${row.id}/process`, { method: "POST" });
+          const outcome = await result.json();
+          setProgress((current) =>
+            current.map((entry, i) =>
+              i === index
+                ? {
+                    ...entry,
+                    stage: "done",
+                    status: result.ok ? outcome.status : "failed",
+                    detail: result.ok ? outcome.detail : (outcome?.error ?? "Could not be read."),
+                  }
+                : entry,
+            ),
+          );
+        } catch (cause) {
+          setProgress((current) =>
+            current.map((entry, i) =>
+              i === index
+                ? {
+                    ...entry,
+                    stage: "done",
+                    status: "failed",
+                    detail: cause instanceof Error ? cause.message : "Could not be read.",
+                  }
+                : entry,
+            ),
+          );
+        }
+        await load();
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The upload failed.");
+      setProgress([]);
     } finally {
       setBusy(null);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  /**
+   * Delete a document and everything held because of it.
+   *
+   * The reason is required by the route, not decorated on by the console: a
+   * document that leaves a filing period with no record of who removed it or
+   * why is a gap in the corpus that cannot be reconstructed later. What goes
+   * with it is the register row, the reading, the categorisation, any finding
+   * raised only about it, the file on Drive and the cached reading — the last
+   * of which is what stops the document walking back in the next time the same
+   * file is uploaded.
+   */
+  async function remove(view: DocumentView, reason: string) {
+    setBusy("Delete");
+    setError("");
+    try {
+      const response = await fetch(`/api/documents/${view.doc.id}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value?.error ?? `Delete responded ${response.status}.`);
+
+      setDeleting(null);
+      if (openId === view.doc.id) setOpenId(null);
+      setNote(value.note ?? `${view.doc.filename} was removed.`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The document could not be removed.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -146,6 +254,45 @@ export function DocumentsPanel() {
     <div className="space-y-4">
       {error && <ErrorNote title="The last action failed">{error}</ErrorNote>}
       {note && <Note>{note}</Note>}
+
+      {progress.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] font-medium">
+              {progress.every((row) => row.stage === "done")
+                ? `Finished ${progress.length} file${progress.length === 1 ? "" : "s"}`
+                : `Working through ${progress.length} file${progress.length === 1 ? "" : "s"}…`}
+            </p>
+            {progress.every((row) => row.stage === "done") && (
+              <Button size="sm" variant="ghost" onClick={() => setProgress([])}>
+                Dismiss
+              </Button>
+            )}
+          </div>
+          <ul className="mt-3 space-y-1.5">
+            {progress.map((row, i) => (
+              <li key={`${row.filename}-${i}`} className="flex items-center gap-2.5 text-[12.5px]">
+                <span className="w-24 shrink-0">
+                  <Badge state={row.stage === "done" ? (row.status ?? "computed") : row.stage} dot />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium" title={row.filename}>
+                  {row.filename}
+                </span>
+                <span className="hidden max-w-[45%] truncate text-ink-3 sm:block" title={row.detail}>
+                  {row.detail ??
+                    (row.stage === "uploading"
+                      ? "sending to the Drive workspace"
+                      : row.stage === "queued"
+                        ? "on Drive, waiting its turn"
+                        : row.stage === "reading"
+                          ? "reading the page and placing it on the chart"
+                          : "")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <Toolbar>
         <Segmented
@@ -299,27 +446,63 @@ export function DocumentsPanel() {
         onClose={() => setOpenId(null)}
         actions={
           open && (
-            /* One Open, not two. It prefers the Drive link where there is one,
-               because that is the copy a reviewer can send to somebody else; a
-               localhost URL only works on this machine. */
-            <a
-              href={
-                open.doc.sourceRef
-                  ? `https://drive.google.com/file/d/${open.doc.sourceRef}/view`
-                  : `/api/documents/${open.doc.id}/file`
-              }
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
-            >
-              <Icon name="external" className="size-3.5" />
-              Open
-            </a>
+            <div className="flex items-center gap-2">
+              {/* One Open, not two. It prefers the Drive link where there is
+                  one, because that is the copy a reviewer can send to somebody
+                  else; a localhost URL only works on this machine. */}
+              <a
+                href={
+                  open.doc.sourceRef
+                    ? `https://drive.google.com/file/d/${open.doc.sourceRef}/view`
+                    : `/api/documents/${open.doc.id}/file`
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
+              >
+                <Icon name="external" className="size-3.5" />
+                Open
+              </a>
+              {/* Deliberately here and not on the table row. Deleting is the
+                  one action in this console that cannot be walked back from
+                  the app, so it is reachable only from the pane that is
+                  showing you the page you are about to delete. */}
+              <Button size="sm" variant="ghost" onClick={() => setDeleting(open)}>
+                Delete
+              </Button>
+            </div>
           )
         }
       >
         {open && <DocumentDetail view={open} currency={currency} />}
       </Drawer>
+
+      <Confirm
+        open={Boolean(deleting)}
+        title={deleting ? `Delete ${deleting.doc.filename}?` : "Delete this document?"}
+        consequence={
+          deleting
+            ? `Everything held because of this document goes with it: what was read off it, the ` +
+              `category it was put in, any flag raised only about it, the file itself on Drive, ` +
+              `and the saved reading that would otherwise bring the old figures back if the same ` +
+              `file were uploaded again. ` +
+              (deleting.extraction?.total != null
+                ? `The ${new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: deleting.extraction.currency ?? currency,
+                  }).format(deleting.extraction.total)} on it leaves the totals. `
+                : "") +
+              `Drive keeps the file in its own trash, so it is recoverable there — not from here.`
+            : ""
+        }
+        confirmLabel="Delete it"
+        variant="danger"
+        busy={busy === "Delete"}
+        requireNote
+        notePlaceholder="Why this does not belong in the period — duplicate, personal, wrong entity…"
+        onConfirm={(reason) => deleting && remove(deleting, reason)}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   );
 }

@@ -375,14 +375,29 @@ export async function withdrawFromWorkspace(id: string, actor: string, reason: s
  * line — a figure with no document behind it, on a form that looks fully
  * supported. That is the worst shape a wrong number can take here.
  *
- * Exceptions are deliberately *not* deleted. `detect` owns their lifecycle: it
- * drops findings that no longer apply and logs that it did, and it keeps the
- * resolution note a person wrote. Clearing them from here would erase that note
- * without anyone deciding to.
+ * Findings go too, but by subtraction rather than by the axe. A flag raised
+ * against three documents still means something when one of them leaves, so
+ * the id is removed from it and the finding stands; a flag that was only ever
+ * about this document has nothing left to be about, and is dropped. Leaving
+ * either behind would put a finding on the review screen pointing at a
+ * document nobody can open.
  *
- * The Drive file is trashed, not merely forgotten — a row removed from the
- * register but left sitting in `input/` would reappear as an unfamiliar file
- * on the very next sweep and be ingested straight back in.
+ * Two things on Drive are trashed rather than merely forgotten, and both are
+ * the difference between a deletion that holds and one that quietly reverses
+ * itself:
+ *
+ *   The file in `input/`. A row removed from the register but left sitting in
+ *   the folder reappears as an unfamiliar file on the very next sweep and is
+ *   ingested straight back in.
+ *
+ * The cached result in `output/` is NOT dropped here, and that is a layering
+ * choice rather than an omission: the cache belongs to the pipeline, which
+ * sits above this module and already imports it. `purgeDocument` in
+ * `workspace-sync` is the complete deletion — it calls this and then clears
+ * the cache — and it is what the route and the console use. Calling this
+ * directly removes the document from the register but leaves its cached result
+ * behind, which means re-uploading the same bytes restores the old figures
+ * without reading anything.
  */
 export async function removeDocument(id: string, actor: string, reason: string): Promise<void> {
   const note = reason?.trim() ?? "";
@@ -406,6 +421,30 @@ export async function removeDocument(id: string, actor: string, reason: string):
     result: undefined,
   }));
 
+  const findings = await mutate<TaxException[], { dropped: number; narrowed: number }>(
+    "exceptions",
+    [],
+    (rows) => {
+      let dropped = 0;
+      let narrowed = 0;
+      const next: TaxException[] = [];
+      for (const row of rows) {
+        if (!row.docIds.includes(id)) {
+          next.push(row);
+          continue;
+        }
+        const remaining = row.docIds.filter((docId) => docId !== id);
+        if (remaining.length === 0) {
+          dropped += 1;
+          continue;
+        }
+        narrowed += 1;
+        next.push({ ...row, docIds: remaining });
+      }
+      return { next, result: { dropped, narrowed } };
+    },
+  );
+
   if (doc.sourceRef) {
     try {
       await trashFile(doc.sourceRef);
@@ -424,7 +463,8 @@ export async function removeDocument(id: string, actor: string, reason: string):
     detail:
       `Deleted ${doc.filename} (${doc.id}, sha256 ${doc.sha256.slice(0, 12)}, ingested ` +
       `${doc.ingestedAt} from ${doc.source}) along with its extraction and categorisation. ` +
-      `Reason: ${note}`,
+      `${findings.dropped} finding(s) dropped and ${findings.narrowed} narrowed to their other ` +
+      `documents. The file was trashed on Drive. Reason: ${note}`,
     periodId: doc.periodId,
     docId: doc.id,
   });

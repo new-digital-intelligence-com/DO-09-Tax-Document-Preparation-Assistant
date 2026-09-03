@@ -33,12 +33,81 @@ import { findInFolder, putJson, readTextFile, workspace } from "./drive";
  * nothing downstream had to change to stop being local.
  */
 
+/**
+ * A few seconds' memory of what Drive just said.
+ *
+ * Not a store, and nothing here survives the process — it is a debounce, and
+ * the reason it earns its place is that one screen asks the same question
+ * several times in a row. The documents tab alone reads the register, the
+ * extractions, the categorisations and the exceptions; the status bar reads
+ * most of them again a moment later. Without this, each of those is a fresh
+ * round trip to Drive for an answer that cannot have changed in the two
+ * hundred milliseconds since the last one, and the page takes seconds to draw
+ * for no reason a person would accept.
+ *
+ * The window is deliberately short. Drive is still the source of truth and a
+ * change made elsewhere is picked up within a few seconds; any write from
+ * THIS process drops the entry immediately, so nothing you do here is ever
+ * served back to you stale.
+ */
+const CACHE_MS = 8_000;
+const reads = new Map<string, { at: number; value: unknown }>();
+
+/**
+ * Which Drive file each collection lives in.
+ *
+ * A read used to cost two round trips: a search of `state/` for the file named
+ * `documents.json`, then a download of whatever that search returned. A write
+ * cost the same two. But a Drive file keeps its id when its contents are
+ * replaced, so the search only ever tells us something we already learned the
+ * first time — and it was being paid for on every read and every write, of
+ * every collection, on every page. Remembering the id spends that lookup once
+ * per collection per process and halves the traffic for the whole register.
+ *
+ * The id can go stale — somebody deletes `state/documents.json` in the Drive
+ * web UI and the next read of it 404s. That is why both paths below drop the
+ * remembered id and fall back to the search rather than reporting a failure:
+ * a wrong id costs an extra round trip once, never a wrong answer.
+ */
+const fileIds = new Map<string, string>();
+
+function cacheKey(userFolderId: string, name: string): string {
+  return `${userFolderId}:${name}`;
+}
+
 export async function readStore<T>(name: string, fallback: T): Promise<T> {
   try {
     const folders = await workspace();
+    const key = cacheKey(folders.userFolderId, name);
+
+    const hit = reads.get(key);
+    if (hit && Date.now() - hit.at < CACHE_MS) {
+      // Handed back as a copy. Callers map and filter these arrays freely and
+      // a shared reference would let one screen's work show up in another's.
+      return JSON.parse(JSON.stringify(hit.value)) as T;
+    }
+
+    const known = fileIds.get(key);
+    if (known) {
+      try {
+        const value = JSON.parse(await readTextFile(known)) as T;
+        reads.set(key, { at: Date.now(), value });
+        return value;
+      } catch {
+        fileIds.delete(key);
+      }
+    }
+
     const file = await findInFolder(folders.stateId, `${name}.json`);
-    if (!file) return fallback;
-    return JSON.parse(await readTextFile(file.id)) as T;
+    if (!file) {
+      reads.set(key, { at: Date.now(), value: fallback });
+      return fallback;
+    }
+
+    fileIds.set(key, file.id);
+    const value = JSON.parse(await readTextFile(file.id)) as T;
+    reads.set(key, { at: Date.now(), value });
+    return value;
   } catch {
     // A collection that was never written, or a parse failure on a row
     // something else left malformed, both read as "nothing here yet" — the
@@ -49,10 +118,30 @@ export async function readStore<T>(name: string, fallback: T): Promise<T> {
   }
 }
 
-/** Writes go straight to Drive; there is nothing else to keep in step with. */
+/**
+ * Writes go straight to Drive, and drop this collection's cached read on the
+ * way through — so the next read of it goes and asks, rather than handing
+ * back what was true before the write.
+ */
 export async function writeStore<T>(name: string, value: T): Promise<void> {
   const folders = await workspace();
-  await putJson(folders.stateId, `${name}.json`, value);
+  const key = cacheKey(folders.userFolderId, name);
+
+  const known = fileIds.get(key);
+  let file;
+  try {
+    file = await putJson(folders.stateId, `${name}.json`, value, known);
+  } catch (error) {
+    // A remembered id that no longer resolves is the one failure worth a
+    // second attempt: drop it and let the write find the file by name, or
+    // create it. Any other failure is real and belongs to the caller.
+    if (!known) throw error;
+    fileIds.delete(key);
+    file = await putJson(folders.stateId, `${name}.json`, value);
+  }
+
+  fileIds.set(key, file.id);
+  reads.set(key, { at: Date.now(), value });
 }
 
 /**

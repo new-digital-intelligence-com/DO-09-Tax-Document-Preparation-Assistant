@@ -338,10 +338,11 @@ function instructionFor(doc: SourceDocument, period: FilingPeriod): string {
     "- On a statement, a payout report or a mileage log there may be no counterparty at all.",
     "  Leave `vendor` out; do not put our own name there to fill the field.",
     "",
-    `For context only: the filing period being prepared is ${period.label}, ${period.start} to`,
-    `${period.end}, reported in ${period.currency}. Do not adjust, convert or shift anything to`,
-    "fit that period or that currency. A document dated outside the period, or priced in",
-    "another currency, is a finding for a reviewer — report it exactly as printed.",
+    "Read the document on its own terms. Its date is whatever is printed on it and its currency",
+    "is whatever it is denominated in — there is no window it has to fall inside and no currency",
+    "it is supposed to be in. Do not adjust, convert or shift anything, do not comment on whether",
+    "a date or a currency looks unexpected, and do not judge whether the document belongs to this",
+    "business. Report exactly what the page says and let a person decide the rest.",
   ].join("\n");
 }
 

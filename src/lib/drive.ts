@@ -380,24 +380,41 @@ export async function uploadFile(input: {
   return { ...file, size: file.size ? Number(file.size) : undefined };
 }
 
-/** Write a file, replacing one of the same name in the same folder. */
+/**
+ * Write a file, replacing one of the same name in the same folder.
+ *
+ * `fileId` lets a caller that already knows which file it is overwriting skip
+ * the lookup. Drive keeps a file's id across an overwrite — a `PATCH` replaces
+ * the content in place — so a caller writing the same file repeatedly can
+ * remember the id once and spend one round trip per write instead of two. Pass
+ * it only where a stale id is recoverable: if the file was trashed underneath
+ * you the `PATCH` fails, and the caller has to drop the id and try again
+ * without it.
+ */
 export async function putFile(input: {
   parentId: string;
   name: string;
   bytes: Buffer;
   mimeType: string;
+  fileId?: string;
 }): Promise<DriveFile> {
-  const existing = await findInFolder(input.parentId, input.name);
-  return uploadFile({ ...input, fileId: existing?.id });
+  const fileId = input.fileId ?? (await findInFolder(input.parentId, input.name))?.id;
+  return uploadFile({ ...input, fileId });
 }
 
 /** Convenience for the JSON the pipeline caches. */
-export async function putJson(parentId: string, name: string, value: unknown): Promise<DriveFile> {
+export async function putJson(
+  parentId: string,
+  name: string,
+  value: unknown,
+  fileId?: string,
+): Promise<DriveFile> {
   return putFile({
     parentId,
     name,
     bytes: Buffer.from(JSON.stringify(value, null, 2), "utf8"),
     mimeType: "application/json",
+    fileId,
   });
 }
 

@@ -908,14 +908,14 @@ export async function overrideCategory(input: {
  * makes a reviewer unable to tie a total back to the receipts; showing only the
  * first puts the wrong number on the return.
  *
- * A document whose extraction states a currency the period does not report in
- * is left out of the sums entirely, and its own count with it. This app does
- * not convert: an exchange rate is a decision about a date and a source, and
- * quietly picking one would put a figure on a tax form that no document
- * supports. Those documents are raised as `currency-mismatch` exceptions
- * instead. An extraction that states no currency at all is treated as the
- * period's, matching what the exception engine does — an unstated currency is
- * not a foreign one.
+ * A document whose extraction states a different currency is COUNTED in
+ * `docCount` but its money is left out of the sums. This app does not convert:
+ * an exchange rate is a decision about a date and a source, and quietly
+ * picking one would put a figure on a tax form that no document supports. But
+ * dropping the document from the count too would make the category read as
+ * though it never arrived — so it is visible, listed, and simply not added up.
+ * An extraction that states no currency at all is treated as the reporting
+ * one; an unstated currency is not a foreign one.
  *
  * A document with a category but no total still counts in `docCount`. Dropping
  * it would make the count agree with the money and disagree with the corpus,
@@ -957,7 +957,7 @@ export async function categoryTotals(periodId: string): Promise<
 
     const extraction = extractionByDoc.get(classification.docId);
     const declared = extraction?.currency?.trim().toUpperCase();
-    if (declared && declared !== reporting) continue;
+    const foreign = Boolean(declared && declared !== reporting);
 
     const row = totals.get(categoryId) ?? {
       categoryId,
@@ -968,8 +968,12 @@ export async function categoryTotals(periodId: string): Promise<
       docCount: 0,
     };
 
+    // Counted even when its money cannot join this total. A document in
+    // another currency is still a document that landed in this category, and
+    // dropping it from the count as well as the sum would make the category
+    // read as though the document never arrived.
     row.docCount += 1;
-    if (extraction?.status === "extracted" && typeof extraction.total === "number") {
+    if (!foreign && extraction?.status === "extracted" && typeof extraction.total === "number") {
       row.recorded += extraction.total;
       row.deductible += extraction.total * deductibleFraction(categoryId);
     }

@@ -67,15 +67,13 @@ const SEVERITY: Record<ExceptionKind, ExceptionSeverity> = {
   "total-mismatch": "high",
   "unreadable-document": "high",
   "missing-period": "medium",
-  "out-of-period": "medium",
-  "currency-mismatch": "high",
+  "currency-mismatch": "low",
   "low-confidence-category": "medium",
   "category-needs-judgement": "medium",
   "missing-vendor-tax-id": "low",
   "possible-personal-expense": "medium",
   "capitalisation-threshold": "medium",
   "contractor-1099-threshold": "medium",
-  "backdated-document": "high",
 };
 
 export function severityOf(kind: ExceptionKind): ExceptionSeverity {
@@ -439,48 +437,17 @@ function missingPeriodDocuments(ctx: Ctx, raise: Raise): void {
   }
 }
 
-/** Dated outside the quarter it was filed under. */
-function outOfPeriod(ctx: Ctx, raise: Raise): void {
-  for (const doc of ctx.docs) {
-    const extraction = ctx.extractionByDoc.get(doc.id);
-    if (!extraction || extraction.status !== "extracted") continue;
-    if (!isDate(extraction.issueDate)) continue;
-    if (inPeriod(extraction.issueDate, ctx.period)) continue;
-
-    const currency = currencyOf(ctx, extraction);
-    const category = categoryOf(ctx, doc.id);
-    const before = extraction.issueDate! < ctx.period.start;
-
-    raise({
-      kind: "out-of-period",
-      title: `${extraction.vendor ?? doc.filename} is dated ${before ? "before" : "after"} ${ctx.period.label}`,
-      detail:
-        `${label(doc)} is dated ${extraction.issueDate}, outside ${ctx.period.label} ` +
-        `(${ctx.period.start} to ${ctx.period.end})` +
-        `${typeof extraction.total === "number" ? `, and totals ${money(extraction.total, currency)}` : ""}` +
-        `${category ? `, categorised as ${categoryName(category)}` : ""}. ` +
-        (ctx.period.basis === "cash"
-          ? `The period is prepared on a cash basis, so what places it is the date the money moved, ` +
-            `not the date printed on the document.`
-          : `The period is prepared on an accrual basis, so what places it is when the service was ` +
-            `performed` +
-            `${extraction.periodStart ? ` — this document states a service period of ${extraction.periodStart} to ${extraction.periodEnd ?? "an unstated end"}` : ", which this document does not state"}.`),
-      suggestedAction:
-        ctx.period.basis === "cash"
-          ? `Confirm when it was paid. If it cleared inside ${ctx.period.label}, resolve this with a ` +
-            `note giving the payment date; if it did not, move the document out of this period so ` +
-            `its amount does not land on a form line for a quarter it does not belong to.`
-          : `Confirm the service period against the engagement. If the work falls inside ` +
-            `${ctx.period.label}, resolve this with a note giving the dates; if not, move the ` +
-            `document to the period that earned it.`,
-      docIds: [doc.id],
-      amount: extraction.total,
-      currency: typeof extraction.total === "number" ? currency : undefined,
-    });
-  }
-}
-
-/** A figure in a currency the period does not add up in. */
+/**
+ * A figure in a currency other than the one the totals are added up in.
+ *
+ * Low severity, and worded as a note rather than a fault: a business that
+ * genuinely invoices in more than one currency is ordinary, and telling
+ * somebody their real AED invoice is a problem because a default said USD
+ * would be the app inventing a rule nobody set. What it IS, is a figure that
+ * cannot be added to a different currency's total without a rate somebody
+ * chose — so it is surfaced, with its own amount intact, and left for a
+ * person to convert if they want it on a line.
+ */
 function currencyMismatch(ctx: Ctx, raise: Raise): void {
   for (const doc of ctx.docs) {
     const extraction = ctx.extractionByDoc.get(doc.id);
@@ -490,18 +457,19 @@ function currencyMismatch(ctx: Ctx, raise: Raise): void {
 
     raise({
       kind: "currency-mismatch",
-      title: `${label(doc)} is in ${declared}, not ${ctx.period.currency}`,
+      title: `${label(doc)} is in ${declared}`,
       detail:
         `${label(doc)} from ${extraction.vendor ?? "an unnamed vendor"} is denominated in ` +
         `${declared}` +
         `${typeof extraction.total === "number" ? ` (total ${money(extraction.total, declared)})` : ""} ` +
-        `while ${ctx.period.label} is prepared in ${ctx.period.currency}. Nothing in this app ` +
-        `converts between currencies, so this document is left out of every category total and ` +
-        `every form line rather than added at a rate nobody chose.`,
+        `while totals here are added up in ${ctx.period.currency}. The document is read, ` +
+        `categorised and listed exactly like any other; what it cannot do is join a total in a ` +
+        `different currency, because nothing in this app converts at a rate nobody chose.`,
       suggestedAction:
-        `Convert at the rate the books use, record the rate, its date and the converted figure in ` +
-        `the note, and have the tax manager confirm it before the package is handed off. Do not ` +
-        `edit the document's own figures.`,
+        `Nothing is wrong with the document. If you want its amount inside a ${ctx.period.currency} ` +
+        `total, convert at the rate the books use and record the rate, its date and the converted ` +
+        `figure in the note. Otherwise accept this — a second currency is a fact about the ` +
+        `business, not a fault in the paperwork.`,
       docIds: [doc.id],
       amount: extraction.total,
       currency: declared,
@@ -748,50 +716,6 @@ function contractor1099Threshold(ctx: Ctx, raise: Raise): void {
   }
 }
 
-/**
- * A document dated after the payment it supports.
- *
- * The one finding in this list that is not about tidiness. An invoice written
- * after the money moved may be an honest reissue, and it may be a document
- * produced to fit a payment that has already been made — and nothing in a
- * corpus of PDFs can tell those apart. So the finding says what the dates are,
- * says nothing about why, and escalates.
- */
-function backdatedDocument(ctx: Ctx, raise: Raise): void {
-  for (const doc of ctx.docs) {
-    const extraction = ctx.extractionByDoc.get(doc.id);
-    const issueDate = extraction?.issueDate;
-    if (!isDate(issueDate)) continue;
-
-    // Without an accounting export there is nothing to compare a document's
-    // date against except the period itself. A document dated after the period
-    // closed, sitting in the period's folder, is the case worth escalating: it
-    // was either filed into the wrong quarter or written after the fact.
-    if (issueDate! <= ctx.period.end) continue;
-
-    const currency = currencyOf(ctx, extraction);
-    const total = extraction?.total;
-
-    raise({
-      kind: "backdated-document",
-      title: `${extraction?.vendor ?? doc.filename} is dated after the period closed`,
-      detail:
-        `${label(doc)} is dated ${issueDate}, after the ${ctx.period.label} end of ` +
-        `${ctx.period.end}` +
-        (typeof total === "number" ? `, and totals ${money(total, currency)}` : "") +
-        `. It was collected into this period's workspace even so. A document written after the ` +
-        `period closed may have been filed into the wrong quarter, and it may have been produced ` +
-        `after the fact. Nothing in the file says which, and this app does not guess.`,
-      suggestedAction:
-        `Escalate to the tax manager before this document goes into any package. Ask ` +
-        `${extraction?.vendor ?? "the counterparty"} when it was issued and what it covers. If it ` +
-        `belongs to the next period, move it there rather than resolving it here.`,
-      docIds: [doc.id],
-      amount: typeof total === "number" ? total : undefined,
-      currency,
-    });
-  }
-}
 /** Worst first, and open before closed — the order a reviewer works in. */
 const SEVERITY_RANK: Record<ExceptionSeverity, number> = { high: 0, medium: 1, low: 2 };
 
@@ -879,8 +803,6 @@ export async function detect(
   unreadableDocument(ctx, raise);
   totalMismatch(ctx, raise);
   currencyMismatch(ctx, raise);
-  backdatedDocument(ctx, raise);
-  outOfPeriod(ctx, raise);
   missingPeriodDocuments(ctx, raise);
   lowConfidenceCategory(ctx, raise);
   categoryNeedsJudgement(ctx, raise);

@@ -24,8 +24,41 @@ export function bad(message: string, status = 400) {
 }
 
 export function failed(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : fallback;
+  const message = error instanceof Error ? explain(error) : fallback;
+  // Also to the server log, with the stack. The browser gets a sentence; the
+  // person debugging needs the line it came from.
+  console.error("[route]", fallback, error);
   return NextResponse.json({ error: message }, { status: 500 });
+}
+
+/**
+ * An error message that says what actually went wrong.
+ *
+ * Node's `fetch` throws a bare `TypeError: fetch failed` and hides the real
+ * reason — the DNS failure, the reset connection, the timeout — one level down
+ * in `cause`. Reporting only the top-level message tells a person that
+ * something involving a network call did not work, which they already knew,
+ * and gives them nothing to act on: a workspace whose Drive token has expired
+ * and one behind a dropped Wi-Fi connection produce the identical sentence.
+ *
+ * So the chain is walked and the causes appended. `ECONNREFUSED` and
+ * `ETIMEDOUT` and `ENOTFOUND` mean different things to whoever has to fix it.
+ */
+function explain(error: Error): string {
+  const parts: string[] = [error.message];
+  let cause: unknown = error.cause;
+
+  for (let depth = 0; depth < 4 && cause; depth += 1) {
+    if (!(cause instanceof Error)) {
+      parts.push(String(cause));
+      break;
+    }
+    const code = (cause as NodeJS.ErrnoException).code;
+    parts.push(code && !cause.message.includes(code) ? `${cause.message} (${code})` : cause.message);
+    cause = cause.cause;
+  }
+
+  return parts.join(" — ");
 }
 
 /** Parse a JSON body, or explain why it could not be. */

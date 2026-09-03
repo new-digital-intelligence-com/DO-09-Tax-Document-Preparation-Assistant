@@ -240,6 +240,16 @@ const STATE_TONE: Record<string, Tone> = {
   pending: "warn",
   unknown: "neutral",
 
+  // What one document's turn through the pipeline came to. "reused" is its own
+  // colour on purpose — it says the model was not called, which is the whole
+  // reason the Drive output folder exists.
+  computed: "ok",
+  reused: "info",
+  declined: "neutral",
+  uploading: "info",
+  queued: "neutral",
+  reading: "warn",
+
   // Exception state — "accepted" and "open" must never look alike. Accepted
   // means a person looked and decided it was fine; open means nobody has.
   open: "warn",

@@ -2,8 +2,17 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { record } from "./audit";
 import { classifyDocument, getClassification } from "./classify";
-import { getDocument, ingestMany, listDocuments } from "./documents";
-import { downloadFile, driveStatus, findInFolder, listFolder, putJson, readTextFile, workspace } from "./drive";
+import { getDocument, ingestMany, listDocuments, removeDocument } from "./documents";
+import {
+  downloadFile,
+  driveStatus,
+  findInFolder,
+  listFolder,
+  putJson,
+  readTextFile,
+  trashFile,
+  workspace,
+} from "./drive";
 import { extractDocument } from "./extract";
 import { activePeriod, preparer } from "./settings";
 import { readStore, writeStore } from "./store";
@@ -133,6 +142,84 @@ export async function writeCachedResult(result: CachedResult): Promise<boolean> 
   const folders = await workspace();
   await putJson(folders.outputId, resultName(result.sha256), result);
   return true;
+}
+
+/**
+ * Throw away what was cached for a document's contents.
+ *
+ * This is what makes a deletion stick. The cache is keyed by the hash of the
+ * file's bytes, not by the document id, so a delete that left the cached
+ * result behind would be undone by the next upload of the same file: it would
+ * come straight back with the old vendor, the old total and the old category,
+ * having never been read again. To anyone watching, the deletion simply did
+ * not happen.
+ *
+ * Returns whether anything was actually there — a document deleted before it
+ * was ever read has no cached result, and that is not a failure.
+ */
+export async function dropCachedResult(sha256: string): Promise<boolean> {
+  if (!sha256) return false;
+  try {
+    const folders = await workspace();
+    const hit = await findInFolder(folders.outputId, resultName(sha256));
+    if (!hit) return false;
+    await trashFile(hit.id);
+    return true;
+  } catch {
+    // A cached result that could not be trashed leaves a stale file in
+    // `output/`, which is a Drive-side tidy-up. It is not a reason to fail the
+    // deletion the person asked for, and the register no longer lists the
+    // document either way.
+    return false;
+  }
+}
+
+/**
+ * Delete a document and everything the workspace holds because of it.
+ *
+ * This is the one entry point for "get rid of it". `removeDocument` clears the
+ * register — the row, its extraction, its categorisation, the findings that
+ * were only about it — and trashes the file in `input/`. What it cannot reach
+ * is the cached result in `output/`, because the cache lives up here.
+ *
+ * Both halves are needed, and the cache is the half people forget. It is keyed
+ * by the hash of the file's bytes, so a deletion that left it behind would be
+ * silently reversed by the next upload of the same file: it would return with
+ * the old vendor, the old total and the old category, having never been read
+ * again. The delete would look like it had not happened.
+ *
+ * The register is cleared first. If clearing the cache then fails, the outcome
+ * is a stale file in `output/` and a document that is genuinely gone — the
+ * recoverable failure. Doing it the other way round risks a document still on
+ * the register whose cached result has been thrown away, which silently costs
+ * a model call to rebuild something that was already correct.
+ */
+export async function purgeDocument(
+  id: string,
+  actor: string,
+  reason: string,
+): Promise<{ id: string; filename: string; sha256: string; cacheCleared: boolean }> {
+  const doc = await getDocument(id);
+  if (!doc) throw new Error(`No document ${id} on the register.`);
+
+  await removeDocument(id, actor, reason);
+  const cacheCleared = await dropCachedResult(doc.sha256);
+
+  if (cacheCleared) {
+    await record({
+      actor,
+      action: "document.cache.cleared",
+      subject: doc.id,
+      result: "ok",
+      detail:
+        `Removed output/${resultName(doc.sha256)}, the cached reading of ${doc.filename}. ` +
+        `Uploading the same file again will read it afresh rather than restoring these figures.`,
+      periodId: doc.periodId,
+      docId: doc.id,
+    });
+  }
+
+  return { id: doc.id, filename: doc.filename, sha256: doc.sha256, cacheCleared };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 /**
  * The domain model, shared by the API routes, the UI, the fixture generator and
  * the agent's native tools. Deliberately small and serialisable: every record
- * round-trips through a JSON file in `.data/`, so nothing here may hold a class
- * instance or a Date.
+ * round-trips through a JSON file in the workspace's Drive folder, so nothing
+ * here may hold a class instance or a Date.
  *
  * Timestamps are ISO 8601 strings, always UTC. Money is a number in
  * `FilingPeriod.currency` minor-unit-free form (dollars, not cents) plus an
@@ -268,15 +268,13 @@ export type ExceptionKind =
   | "total-mismatch"
   | "unreadable-document"
   | "missing-period"
-  | "out-of-period"
   | "currency-mismatch"
   | "low-confidence-category"
   | "category-needs-judgement"
   | "missing-vendor-tax-id"
   | "possible-personal-expense"
   | "capitalisation-threshold"
-  | "contractor-1099-threshold"
-  | "backdated-document";
+  | "contractor-1099-threshold";
 
 export type ExceptionSeverity = "high" | "medium" | "low";
 

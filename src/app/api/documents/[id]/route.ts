@@ -1,4 +1,5 @@
-import { getDocument, removeDocument } from "@/lib/documents";
+import { getDocument } from "@/lib/documents";
+import { purgeDocument } from "@/lib/workspace-sync";
 import { getExtraction } from "@/lib/extract";
 import { getClassification } from "@/lib/classify";
 import { listExceptions } from "@/lib/exceptions";
@@ -25,7 +26,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 /**
- * Remove a document from the workspace.
+ * Remove a document and everything held because of it.
+ *
+ * `purgeDocument` rather than `removeDocument`: the register row, the reading,
+ * the categorisation, the findings raised about it, the file in `input/` and
+ * the cached result in `output/` all go. The cache is the one that decides
+ * whether the deletion holds — left behind, it restores the old figures the
+ * moment the same file is uploaded again.
  *
  * The reason is required and written to the trail. A document that vanishes
  * from a filing period with no record of who removed it or why is the one gap
@@ -40,8 +47,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const doc = await getDocument(id);
     if (!doc) return bad(`No document with id ${id}.`, 404);
 
-    await removeDocument(id, preparer(), reason);
-    return ok({ removed: id, filename: doc.filename, reason });
+    const removed = await purgeDocument(id, preparer(), reason);
+    return ok({
+      removed: removed.id,
+      filename: removed.filename,
+      cacheCleared: removed.cacheCleared,
+      reason,
+      note:
+        `${removed.filename} is gone: its row, its reading, its categorisation and any finding ` +
+        `raised only about it, plus the file on Drive` +
+        (removed.cacheCleared ? " and its cached reading." : "."),
+    });
   } catch (error) {
     if (error instanceof Error && /needs a note|must be a JSON/.test(error.message)) {
       return bad(error.message);
