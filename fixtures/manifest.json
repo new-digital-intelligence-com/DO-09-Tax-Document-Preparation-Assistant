@@ -1,0 +1,1266 @@
+{
+  "generatedBy": "scripts/generate-fixtures.mjs",
+  "entity": "Northwind Studio LLC",
+  "entityTaxId": "87-4419203",
+  "period": {
+    "id": "period_2025_q1",
+    "label": "2025 Q1",
+    "start": "2025-01-01",
+    "end": "2025-03-31",
+    "currency": "USD"
+  },
+  "documentCount": 39,
+  "documents": [
+    {
+      "id": "doc_f01",
+      "file": "INV-2025-001 Acme Robotics.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Invoices out",
+      "sourceRef": "1aQ7nR-northwind-inv-2025-001",
+      "mimeType": "application/pdf",
+      "bytes": 4588,
+      "sha256": "ca25a69190050e58337f652584afe092288340849103e17234ac931cfb1672f7",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Acme Robotics Inc.",
+        "issueDate": "2025-01-08",
+        "invoiceNumber": "INV-2025-001",
+        "total": 12500,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f02",
+      "file": "INV-2025-002 Bluepeak Health.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Invoices out",
+      "sourceRef": "1aQ7nR-northwind-inv-2025-002",
+      "mimeType": "application/pdf",
+      "bytes": 4017,
+      "sha256": "8c6d3574f2160590af9dd4acc79eaf59a86e378f96a42b60a047ba585f06c2d5",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Bluepeak Health Systems",
+        "issueDate": "2025-01-15",
+        "invoiceNumber": "INV-2025-002",
+        "total": 8400,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f03",
+      "file": "INV-2025-003 Cormorant Ventures.pdf",
+      "source": "gmail",
+      "sourceDetail": "sent: accounts@northwind.studio → ap@cormorant.vc",
+      "sourceRef": "msg-18f2c9a1b0e3",
+      "mimeType": "application/pdf",
+      "bytes": 4469,
+      "sha256": "3c1ca7fe19800866af49680705b01e1bfa77fab604e6311f9a753cecb2e06d10",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Cormorant Ventures LP",
+        "issueDate": "2025-02-04",
+        "invoiceNumber": "INV-2025-003",
+        "total": 15000,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f04",
+      "file": "INV-2025-004 Acme Robotics.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Invoices out",
+      "sourceRef": "1aQ7nR-northwind-inv-2025-004",
+      "mimeType": "application/pdf",
+      "bytes": 4008,
+      "sha256": "84541c3f72710f8c06d79036e3e846b3a2d8f696d2678cecc61b1b52c18b391c",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Acme Robotics Inc.",
+        "issueDate": "2025-02-08",
+        "invoiceNumber": "INV-2025-004",
+        "total": 12500,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f05",
+      "file": "INV-2025-005 Bluepeak Health.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Invoices out",
+      "sourceRef": "1aQ7nR-northwind-inv-2025-005",
+      "mimeType": "application/pdf",
+      "bytes": 4016,
+      "sha256": "d9a0fd29f0e964ab74174cddab18bd4dcb5e9b5148f5930b105b9abfba240d10",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Bluepeak Health Systems",
+        "issueDate": "2025-02-15",
+        "invoiceNumber": "INV-2025-005",
+        "total": 8400,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f06",
+      "file": "INV-2025-006 Delta Freight Co.pdf",
+      "source": "gmail",
+      "sourceDetail": "sent: accounts@northwind.studio → ap@deltafreight.co",
+      "sourceRef": "msg-18f5d1c4a992",
+      "mimeType": "application/pdf",
+      "bytes": 4013,
+      "sha256": "85341f34fb8d8b0792ddba4caf4a986468a1aa539d944c56532dc32b6c6f3ddd",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Delta Freight Co.",
+        "issueDate": "2025-03-06",
+        "invoiceNumber": "INV-2025-006",
+        "total": 6750,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f07",
+      "file": "INV-2025-007 Bluepeak Health.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Invoices out",
+      "sourceRef": "1aQ7nR-northwind-inv-2025-007",
+      "mimeType": "application/pdf",
+      "bytes": 4011,
+      "sha256": "c461f3a66632567250d8ec5a2f06897edfd2fa621443da9f693ddcc985886bb1",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Bluepeak Health Systems",
+        "issueDate": "2025-03-15",
+        "invoiceNumber": "INV-2025-007",
+        "total": 8400,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "invoice-issued",
+        "expectedCategoryId": "income-services"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f08",
+      "file": "CN-2025-001 Delta Freight credit note.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Credit notes",
+      "sourceRef": "1aQ7nR-northwind-cn-2025-001",
+      "mimeType": "application/pdf",
+      "bytes": 4181,
+      "sha256": "02728a264065d9a50331d081f1f0e812c99699be5085e72a35ad1617fd380b3a",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Delta Freight Co.",
+        "issueDate": "2025-03-24",
+        "invoiceNumber": "CN-2025-001",
+        "total": -750,
+        "currency": "USD",
+        "direction": "income",
+        "docType": "credit-note",
+        "expectedCategoryId": "income-refunds"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f09",
+      "file": "stripe-payout-statement-feb-2025.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: receipts@stripe.com",
+      "sourceRef": "msg-18f7a3b21c40",
+      "mimeType": "application/pdf",
+      "bytes": 5493,
+      "sha256": "c86fa9aeac2ac1c48870192a5aeafc587338cc0ee597281a568d5885ec42e340",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Stripe",
+        "issueDate": "2025-02-28",
+        "invoiceNumber": "po_1QxNwFeb25",
+        "total": 611.2,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "payout-report",
+        "expectedCategoryId": "expense-commissions",
+        "note": "Gross volume 20,900.00 is revenue already invoiced; the deductible figure on this statement is the 611.20 of processing fees."
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f10",
+      "file": "aws-invoice-jan-2025.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: billing@amazonaws.com",
+      "sourceRef": "msg-18e9c4d5f001",
+      "mimeType": "application/pdf",
+      "bytes": 5354,
+      "sha256": "f900b09d15f7087a2075a7fd316414cd7d78d7b65876cd510a180cb5de7b6136",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Amazon Web Services, Inc.",
+        "issueDate": "2025-01-03",
+        "invoiceNumber": "INV-AWS-JAN25",
+        "total": 1842.19,
+        "subtotal": 1697.36,
+        "tax": 144.83,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": [
+        "ledger-amount-mismatch"
+      ]
+    },
+    {
+      "id": "doc_f11",
+      "file": "aws-invoice-feb-2025.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: billing@amazonaws.com",
+      "sourceRef": "msg-18ec71a9b220",
+      "mimeType": "application/pdf",
+      "bytes": 5354,
+      "sha256": "bd188078351aaea26131118ab6964a33ba510a0c3b05944a1130e3aa10355980",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Amazon Web Services, Inc.",
+        "issueDate": "2025-02-03",
+        "invoiceNumber": "INV-AWS-FEB25",
+        "total": 2014.55,
+        "subtotal": 1856.5,
+        "tax": 158.05,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f12",
+      "file": "figma-organization-annual.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Software",
+      "sourceRef": "1gW3rX-figma-organization-annual",
+      "mimeType": "application/pdf",
+      "bytes": 4423,
+      "sha256": "0f42f5dd819d6d87855bbfd054e1c0d20511292347b208f1f15fba5cd952f7b8",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Figma, Inc.",
+        "issueDate": "2025-01-11",
+        "invoiceNumber": "FIG-2025-4471",
+        "total": 1080,
+        "subtotal": 1080,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f13",
+      "file": "google-workspace-jan.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Software",
+      "sourceRef": "1gW3rX-google-workspace-jan",
+      "mimeType": "application/pdf",
+      "bytes": 4134,
+      "sha256": "3ec024d0327c3035dc2ef717379fa862f846afbe23702bb8acf5322293e0a624",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Google LLC",
+        "issueDate": "2025-01-02",
+        "invoiceNumber": "GW-JAN-2025",
+        "total": 180,
+        "subtotal": 180,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f14",
+      "file": "google-workspace-feb.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Software",
+      "sourceRef": "1gW3rX-google-workspace-feb",
+      "mimeType": "application/pdf",
+      "bytes": 4136,
+      "sha256": "3cef395971b5146b0c1fcab90c74482f041a0a5e8b7e3a3b0d2810118d006763",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Google LLC",
+        "issueDate": "2025-02-02",
+        "invoiceNumber": "GW-FEB-2025",
+        "total": 180,
+        "subtotal": 180,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f15",
+      "file": "google-workspace-mar.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Software",
+      "sourceRef": "1gW3rX-google-workspace-mar",
+      "mimeType": "application/pdf",
+      "bytes": 4129,
+      "sha256": "657fb785c55b2f0edbf65baae902828f0c3a71fcfcc7d2b98b772fa6614d828c",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Google LLC",
+        "issueDate": "2025-03-02",
+        "invoiceNumber": "GW-MAR-2025",
+        "total": 180,
+        "subtotal": 180,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f16",
+      "file": "wework-jan-2025.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Rent",
+      "sourceRef": "1bR8mS-wework-jan-2025",
+      "mimeType": "application/pdf",
+      "bytes": 4018,
+      "sha256": "722ed7553daff26f5b1d94e70e5f619b16a722a10b764c4d4a6ddf60bc51c94e",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "WeWork",
+        "issueDate": "2025-01-01",
+        "invoiceNumber": "WW-2025-0101",
+        "total": 1400,
+        "subtotal": 1400,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-rent-property"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f17",
+      "file": "wework-feb-2025.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Rent",
+      "sourceRef": "1bR8mS-wework-feb-2025",
+      "mimeType": "application/pdf",
+      "bytes": 4021,
+      "sha256": "4cc549373ad3b69a20dc33ba24ffb6be893da5406c84d4f39b50e3561d3c0805",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "WeWork",
+        "issueDate": "2025-02-01",
+        "invoiceNumber": "WW-2025-0201",
+        "total": 1400,
+        "subtotal": 1400,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-rent-property"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f18",
+      "file": "wework-mar-2025.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Rent",
+      "sourceRef": "1bR8mS-wework-mar-2025",
+      "mimeType": "application/pdf",
+      "bytes": 4012,
+      "sha256": "99ea63c283f3c37e8dc39eb8019c3cf52e35962d81dda30740d6c46cb7cd42d0",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "WeWork",
+        "issueDate": "2025-03-01",
+        "invoiceNumber": "WW-2025-0301",
+        "total": 1400,
+        "subtotal": 1400,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-rent-property"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f19",
+      "file": "statefarm-business-liability.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Insurance",
+      "sourceRef": "1cS9nT-statefarm-gl-q1",
+      "mimeType": "application/pdf",
+      "bytes": 4378,
+      "sha256": "56e2a0ccc6ac39500b20d2c52187aa01e7028c9238e39f8470d3f428709d8064",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "State Farm Fire and Casualty Company",
+        "issueDate": "2025-01-20",
+        "invoiceNumber": "97-BL-4471-08",
+        "total": 1260,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "statement",
+        "expectedCategoryId": "expense-insurance"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f20",
+      "file": "harbor-legal-llp-invoice-2291.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Professional services",
+      "sourceRef": "1hX4sY-harbor-legal-2291",
+      "mimeType": "application/pdf",
+      "bytes": 4625,
+      "sha256": "dad0a7670e808fecab9599cd2ba68d6c7ece06857041f394ae2147ae48f189ae",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Harbor Legal LLP",
+        "issueDate": "2025-02-19",
+        "invoiceNumber": "2291",
+        "total": 950,
+        "subtotal": 950,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-professional",
+        "vendorTaxId": "93-2210447"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f21",
+      "file": "staples-receipt-2025-02-11.pdf",
+      "source": "upload",
+      "sourceDetail": "photographed and uploaded by the office manager",
+      "sourceRef": "upload-staples-0211",
+      "mimeType": "application/pdf",
+      "bytes": 3883,
+      "sha256": "558fe8b4476573127f289e05f0b95ae81a90f1879ebf73ed633b2e144681a5f0",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Staples",
+        "issueDate": "2025-02-11",
+        "invoiceNumber": "4471-0092",
+        "total": 87.43,
+        "subtotal": 80.03,
+        "tax": 7.4,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-supplies"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f22",
+      "file": "delta-air-eticket-2025-03-03.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: DeltaAirLines@e.delta.com",
+      "sourceRef": "msg-18f1c0d4e881",
+      "mimeType": "application/pdf",
+      "bytes": 5694,
+      "sha256": "adf508998500a4ebf85acdaa53ffc00652eb5084a795e7e4a18c990556b4c5ed",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Delta Air Lines, Inc.",
+        "issueDate": "2025-03-03",
+        "invoiceNumber": "0062418833901",
+        "total": 612.4,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-travel"
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f23",
+      "file": "hotel-folio-hyatt-sf.pdf",
+      "source": "upload",
+      "sourceDetail": "emailed by the hotel, forwarded and uploaded",
+      "sourceRef": "upload-hyatt-folio-884213",
+      "mimeType": "application/pdf",
+      "bytes": 5616,
+      "sha256": "71602f86c15cf11cfc360c364f39dd6e296b32a0576418cc146107834e57bf6c",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Hyatt Regency San Francisco",
+        "issueDate": "2025-03-05",
+        "invoiceNumber": "884213",
+        "total": 884,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-travel",
+        "note": "The folio shows a balance of 0.00 because it was settled to the card on departure. The expense is the 884.00 of total charges, not the balance."
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f24",
+      "file": "receipt-cascade-kitchen.pdf",
+      "source": "upload",
+      "sourceDetail": "photographed and uploaded by the office manager",
+      "sourceRef": "upload-cascade-0304",
+      "mimeType": "application/pdf",
+      "bytes": 4001,
+      "sha256": "4bf6d68c4f5a0dc8b0ae6d8f10c8df5f50b98a0b3e029c8dd3201a4dfa45f9e5",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Cascade Kitchen",
+        "issueDate": "2025-03-04",
+        "invoiceNumber": "CK-0318",
+        "total": 214.6,
+        "subtotal": 172,
+        "tax": 8.6,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-meals",
+        "note": "Business meals reach the return at 50%. The recorded amount is 214.60; the deductible amount is 107.30."
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f25",
+      "file": "adobe-cc-feb-2025.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: message@adobe.com",
+      "sourceRef": "msg-18ec0b1177a4",
+      "mimeType": "application/pdf",
+      "bytes": 4158,
+      "sha256": "1654ad75ad36fbddc429d626eaa1fac93e41fa4c0b4a1393091220f00af7a275",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Adobe Inc.",
+        "issueDate": "2025-02-06",
+        "invoiceNumber": "ADB-88214",
+        "total": 59.99,
+        "subtotal": 59.99,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": [
+        "duplicate-document"
+      ]
+    },
+    {
+      "id": "doc_f26",
+      "file": "Adobe_Invoice_ADB-88214 (1).pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Software — saved a second time from the same email",
+      "sourceRef": "1dT0oU-adobe-invoice-adb-88214-1",
+      "mimeType": "application/pdf",
+      "bytes": 4158,
+      "sha256": "1654ad75ad36fbddc429d626eaa1fac93e41fa4c0b4a1393091220f00af7a275",
+      "imageOnly": false,
+      "copyOf": "doc_f25",
+      "truth": {
+        "vendor": "Adobe Inc.",
+        "issueDate": "2025-02-06",
+        "invoiceNumber": "ADB-88214",
+        "total": 59.99,
+        "subtotal": 59.99,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "expense-office"
+      },
+      "expectedExceptions": [
+        "duplicate-document",
+        "unmatched-document"
+      ]
+    },
+    {
+      "id": "doc_f27",
+      "file": "northgate-print-invoice-4471.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Marketing",
+      "sourceRef": "1iY5tZ-northgate-print-4471",
+      "mimeType": "application/pdf",
+      "bytes": 4777,
+      "sha256": "5a72e3f812f0e999fbf5701ea1cffbb253ebba7dc985b935b4ff93162345c79f",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Northgate Print Works",
+        "issueDate": "2025-02-21",
+        "invoiceNumber": "4471",
+        "subtotal": 900,
+        "tax": 72,
+        "total": 927,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-advertising",
+        "note": "The arithmetic does not hold: 900.00 + 72.00 is 972.00, and the invoice prints 927.00. Extract what is printed; do not correct it."
+      },
+      "expectedExceptions": [
+        "total-mismatch"
+      ]
+    },
+    {
+      "id": "doc_f28",
+      "file": "hetzner-rechnung-2025-03.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: rechnung@hetzner.com",
+      "sourceRef": "msg-18f0aa3311d6",
+      "mimeType": "application/pdf",
+      "bytes": 4889,
+      "sha256": "2b447c87b1d518a88a4ef34d6cc416821035e21be7e438a62d3b6c72bef3b1b6",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Hetzner Online GmbH",
+        "issueDate": "2025-03-05",
+        "invoiceNumber": "R0025883149",
+        "subtotal": 74.79,
+        "tax": 14.21,
+        "total": 89,
+        "currency": "EUR",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-office",
+        "note": "Priced in euros. The period is USD, so this is flagged rather than converted — no exchange rate is stated on the document."
+      },
+      "expectedExceptions": [
+        "currency-mismatch"
+      ]
+    },
+    {
+      "id": "doc_f29",
+      "file": "scan_20250312_receipt.pdf",
+      "source": "upload",
+      "sourceDetail": "scanned to the shared folder by the office scanner",
+      "sourceRef": "upload-scan-20250312",
+      "mimeType": "application/pdf",
+      "bytes": 28184,
+      "sha256": "836028f2825b7d8611d4b06133195eb7d488e77a5f0664a30eb9864eaab1d5a4",
+      "imageOnly": true,
+      "truth": {
+        "vendor": null,
+        "issueDate": null,
+        "total": null,
+        "currency": null,
+        "direction": "unknown",
+        "docType": "unknown",
+        "expectedCategoryId": "uncategorised",
+        "note": "No text layer at all. A correct extraction returns status unreadable and names what it could see. Guessing a vendor or a total from the filename is the failure this fixture tests for."
+      },
+      "expectedExceptions": [
+        "unreadable-document",
+        "unmatched-document"
+      ]
+    },
+    {
+      "id": "doc_f30",
+      "file": "apple-store-invoice-w1882043.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: no_reply@email.apple.com",
+      "sourceRef": "msg-18e7f3b09912",
+      "mimeType": "application/pdf",
+      "bytes": 4146,
+      "sha256": "e56046ed13e9c22dc6d555b77859ef5d80a6d4e5fce5e7a4a76aecc4346477bc",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Apple Inc.",
+        "issueDate": "2025-01-28",
+        "invoiceNumber": "W1882043",
+        "subtotal": 2899,
+        "tax": 0,
+        "total": 2899,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-depreciation",
+        "note": "Above the 2,500 capitalisation threshold and a durable item, so it is a depreciation question rather than an expense. The assistant routes it; it does not decide it."
+      },
+      "expectedExceptions": [
+        "capitalisation-threshold",
+        "category-needs-judgement"
+      ]
+    },
+    {
+      "id": "doc_f31",
+      "file": "verizon-wireless-feb-2025.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Utilities",
+      "sourceRef": "1jZ6uA-verizon-feb-2025",
+      "mimeType": "application/pdf",
+      "bytes": 3897,
+      "sha256": "201632f595e85950c32a2dd68df41afb525297bd03d0893ba047407697b32853",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Verizon Wireless",
+        "issueDate": "2025-02-14",
+        "invoiceNumber": "9824411700001",
+        "total": 128.77,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-utilities",
+        "note": "A mixed-use line. Utilities always route to a human because the business-use fraction is a judgement no document states."
+      },
+      "expectedExceptions": [
+        "category-needs-judgement"
+      ]
+    },
+    {
+      "id": "doc_f32",
+      "file": "wholefoods-2025-02-27.pdf",
+      "source": "upload",
+      "sourceDetail": "photographed and uploaded by the office manager",
+      "sourceRef": "upload-wfm-0227",
+      "mimeType": "application/pdf",
+      "bytes": 4519,
+      "sha256": "aceeb1599348cc537acf479366a5c794ebcb467b3ee328187bf31dca3677606f",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Whole Foods Market",
+        "issueDate": "2025-02-27",
+        "invoiceNumber": "WFM-0227",
+        "total": 142.88,
+        "subtotal": 142.88,
+        "tax": 0,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "receipt",
+        "expectedCategoryId": "non-deductible-personal",
+        "note": "Groceries on the business card. Recorded and set aside rather than deducted, and stated as a possibility for a person to confirm."
+      },
+      "expectedExceptions": [
+        "possible-personal-expense",
+        "category-needs-judgement"
+      ]
+    },
+    {
+      "id": "doc_f33",
+      "file": "raman-consulting-invoice-0031.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: priya@ramanconsulting.dev",
+      "sourceRef": "msg-18e9002b41c8",
+      "mimeType": "application/pdf",
+      "bytes": 4259,
+      "sha256": "cccf04f361c27e4bf26aeca3ff550da1ff638b01a3a501922e608bdf2dbda042",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Raman Consulting",
+        "issueDate": "2025-01-22",
+        "invoiceNumber": "0031",
+        "subtotal": 4500,
+        "tax": 0,
+        "total": 4500,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-contract-labor",
+        "vendorTaxId": null,
+        "note": "No tax identification number is printed anywhere on this invoice. A 1099-NEC needs one, so it has to be requested before filing."
+      },
+      "expectedExceptions": [
+        "missing-vendor-tax-id",
+        "contractor-1099-threshold"
+      ]
+    },
+    {
+      "id": "doc_f34",
+      "file": "raman-consulting-invoice-0034.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: priya@ramanconsulting.dev",
+      "sourceRef": "msg-18f4b21c0d55",
+      "mimeType": "application/pdf",
+      "bytes": 4310,
+      "sha256": "ab6fe668144c8f116f5dc5e12de752bcf21ae2a5334dae7be3f79535bab5a4be",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Raman Consulting",
+        "issueDate": "2025-03-10",
+        "invoiceNumber": "0034",
+        "subtotal": 3200,
+        "tax": 0,
+        "total": 3200,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-contract-labor",
+        "vendorTaxId": "88-3320145",
+        "note": "With invoice 0031 the period total is 7,700.00, well over the 600.00 1099-NEC threshold."
+      },
+      "expectedExceptions": [
+        "contractor-1099-threshold"
+      ]
+    },
+    {
+      "id": "doc_f35",
+      "file": "t-alvarez-invoice-mar.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: tom@alvarezmotion.com",
+      "sourceRef": "msg-18f6d09a11bb",
+      "mimeType": "application/pdf",
+      "bytes": 4004,
+      "sha256": "5c4750abe957b1de28f0324175674ddacf2c5e09d311eeb141d884ed37baf778",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Alvarez Motion",
+        "issueDate": "2025-03-18",
+        "invoiceNumber": "TA-MAR-2025",
+        "subtotal": 520,
+        "tax": 0,
+        "total": 520,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-contract-labor",
+        "vendorTaxId": "84-1907733",
+        "note": "The negative case. Contract labour with a tax id on file and a period total of 520.00, below the 600.00 threshold — nothing should be raised against it."
+      },
+      "expectedExceptions": []
+    },
+    {
+      "id": "doc_f36",
+      "file": "meridian-health-premium-q1.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Insurance",
+      "sourceRef": "1eU1pV-meridian-q1-premium",
+      "mimeType": "application/pdf",
+      "bytes": 4361,
+      "sha256": "daa7b2553453a09dd41f27dfa115876d298aa96be18003ed6907d60d4db954f9",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Meridian Health Plan",
+        "issueDate": "2025-01-05",
+        "invoiceNumber": "MH-Q1-2025",
+        "total": 1842,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "statement",
+        "expectedCategoryId": "non-deductible-health",
+        "note": "Self-employed health premiums are an adjustment to income on Schedule 1, not a Schedule C expense. Recorded so the figure is not lost, kept off the expense lines."
+      },
+      "expectedExceptions": [
+        "category-needs-judgement"
+      ]
+    },
+    {
+      "id": "doc_f37",
+      "file": "mileage-log-q1-2025.pdf",
+      "source": "drive",
+      "sourceDetail": "Finance/2025/Q1/Vehicle",
+      "sourceRef": "1fV2qW-mileage-log-q1",
+      "mimeType": "application/pdf",
+      "bytes": 7290,
+      "sha256": "7b62f2fda3096f426e3ae853806963534280cfe2d86899f04e23e5dc0529d63e",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Northwind Studio LLC",
+        "issueDate": "2025-03-31",
+        "invoiceNumber": null,
+        "total": null,
+        "currency": null,
+        "direction": "expense",
+        "docType": "mileage-log",
+        "expectedCategoryId": "expense-vehicle",
+        "note": "Carries no dollar figure at all. A correct extraction leaves total absent rather than deriving one from a mileage rate the document does not state."
+      },
+      "expectedExceptions": [
+        "category-needs-judgement",
+        "unmatched-document"
+      ]
+    },
+    {
+      "id": "doc_f38",
+      "file": "koyo-studio-invoice-2024-1219.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: hello@koyo.studio",
+      "sourceRef": "msg-18e2119c00ab",
+      "mimeType": "application/pdf",
+      "bytes": 4382,
+      "sha256": "aa1ff6ce3c41faf55e1d13d5d4add7fab7a05545eecea0be09a8a71d6dcb9d09",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Koyo Studio",
+        "issueDate": "2024-12-19",
+        "invoiceNumber": "KS-2024-1219",
+        "subtotal": 1650,
+        "tax": 0,
+        "total": 1650,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-contract-labor",
+        "vendorTaxId": "27-4418890",
+        "note": "Dated 19 December 2024, outside 2025 Q1, and it has no ledger row in this period. Flagged twice and excluded from the totals rather than pulled into the quarter."
+      },
+      "expectedExceptions": [
+        "out-of-period",
+        "unmatched-document"
+      ]
+    },
+    {
+      "id": "doc_f39",
+      "file": "bright-anvil-invoice-0442.pdf",
+      "source": "gmail",
+      "sourceDetail": "from: accounts@brightanvil.io",
+      "sourceRef": "msg-18f9c1a20d33",
+      "mimeType": "application/pdf",
+      "bytes": 4092,
+      "sha256": "dd756990b661219fd666d9ce6ee6012f8f12ff1b6517558f555fa67e7ce2240a",
+      "imageOnly": false,
+      "truth": {
+        "vendor": "Bright Anvil Labs",
+        "issueDate": "2025-04-02",
+        "invoiceNumber": "0442",
+        "subtotal": 3400,
+        "tax": 0,
+        "total": 3400,
+        "currency": "USD",
+        "direction": "expense",
+        "docType": "invoice-received",
+        "expectedCategoryId": "expense-contract-labor",
+        "vendorTaxId": "46-3388120",
+        "note": "Issued 2 April 2025 for a ledger entry posted 27 March 2025. A document dated after the payment it supports is the one finding that goes to the tax manager immediately."
+      },
+      "expectedExceptions": [
+        "backdated-document",
+        "contractor-1099-threshold"
+      ]
+    }
+  ],
+  "ledgerFile": "ledger-2025-q1.csv",
+  "ledgerRowCount": 38,
+  "ledgerColumns": [
+    "date",
+    "description",
+    "counterparty",
+    "amount",
+    "currency",
+    "account",
+    "ref"
+  ],
+  "expectedFindings": [
+    {
+      "kind": "duplicate-document",
+      "severity": "high",
+      "docIds": [
+        "doc_f25",
+        "doc_f26"
+      ],
+      "detail": "Adobe ADB-88214 arrived twice, byte for byte. adobe-cc-feb-2025.pdf and Adobe_Invoice_ADB-88214 (1).pdf share a sha256."
+    },
+    {
+      "kind": "total-mismatch",
+      "severity": "high",
+      "docIds": [
+        "doc_f27"
+      ],
+      "detail": "Northgate Print 4471 prints 900.00 + 72.00 = 927.00. The arithmetic gives 972.00; the last two digits are transposed."
+    },
+    {
+      "kind": "ledger-amount-mismatch",
+      "severity": "high",
+      "docIds": [
+        "doc_f10"
+      ],
+      "ledgerRefs": [
+        "INV-AWS-JAN25"
+      ],
+      "detail": "AWS January: the invoice says 1,842.19 and the ledger says 1,824.19. An 18.00 delta on the same two digits."
+    },
+    {
+      "kind": "missing-support",
+      "severity": "high",
+      "docIds": [],
+      "ledgerRefs": [
+        "INV-AWS-MAR25"
+      ],
+      "detail": "The March AWS charge of 2,190.44 is on the ledger with no invoice behind it."
+    },
+    {
+      "kind": "missing-support",
+      "severity": "high",
+      "docIds": [],
+      "ledgerRefs": [
+        "RC-DP-0218"
+      ],
+      "detail": "Ridgeline Coworking day pass, 45.00, no receipt collected."
+    },
+    {
+      "kind": "missing-support",
+      "severity": "high",
+      "docIds": [],
+      "ledgerRefs": [
+        "NL-2025-03"
+      ],
+      "detail": "Notion Labs subscription, 96.00, no receipt collected."
+    },
+    {
+      "kind": "missing-period",
+      "severity": "medium",
+      "docIds": [
+        "doc_f10",
+        "doc_f11"
+      ],
+      "ledgerRefs": [
+        "INV-AWS-MAR25"
+      ],
+      "detail": "AWS billed January and February. March has a ledger row and no document, breaking a monthly cadence inside the period."
+    },
+    {
+      "kind": "unmatched-document",
+      "severity": "medium",
+      "docIds": [
+        "doc_f26"
+      ],
+      "detail": "The second Adobe copy pairs with nothing: the single ledger row is already taken by the first."
+    },
+    {
+      "kind": "unmatched-document",
+      "severity": "medium",
+      "docIds": [
+        "doc_f29"
+      ],
+      "detail": "scan_20250312_receipt.pdf has no figures to match on and no ledger row that fits it."
+    },
+    {
+      "kind": "unmatched-document",
+      "severity": "medium",
+      "docIds": [
+        "doc_f37"
+      ],
+      "detail": "The mileage log states no amount, so there is nothing for a cash-basis ledger row to pair with."
+    },
+    {
+      "kind": "unmatched-document",
+      "severity": "medium",
+      "docIds": [
+        "doc_f38"
+      ],
+      "detail": "Koyo Studio KS-2024-1219 has no ledger row in this period; it belongs to the quarter before."
+    },
+    {
+      "kind": "unreadable-document",
+      "severity": "high",
+      "docIds": [
+        "doc_f29"
+      ],
+      "detail": "scan_20250312_receipt.pdf carries no text layer. Nothing can be read off it, and nothing should be guessed from its filename."
+    },
+    {
+      "kind": "out-of-period",
+      "severity": "medium",
+      "docIds": [
+        "doc_f38"
+      ],
+      "detail": "Koyo Studio KS-2024-1219 is dated 2024-12-19, outside 2025-01-01 to 2025-03-31."
+    },
+    {
+      "kind": "currency-mismatch",
+      "severity": "high",
+      "docIds": [
+        "doc_f28"
+      ],
+      "detail": "Hetzner R0025883149 totals 89.00 EUR against a USD period. No rate is stated on the document, so it is flagged rather than converted."
+    },
+    {
+      "kind": "category-needs-judgement",
+      "severity": "medium",
+      "docIds": [
+        "doc_f30"
+      ],
+      "detail": "A MacBook Pro is a depreciation question, not an office expense. Capitalise, de minimis, or section 179 is a person's call."
+    },
+    {
+      "kind": "category-needs-judgement",
+      "severity": "medium",
+      "docIds": [
+        "doc_f31"
+      ],
+      "detail": "Verizon: three lines, one of them also used personally. The business-use fraction is not on the bill."
+    },
+    {
+      "kind": "category-needs-judgement",
+      "severity": "medium",
+      "docIds": [
+        "doc_f32"
+      ],
+      "detail": "Whole Foods on the business card. Calling a purchase personal removes a deduction, so a human confirms it."
+    },
+    {
+      "kind": "category-needs-judgement",
+      "severity": "medium",
+      "docIds": [
+        "doc_f36"
+      ],
+      "detail": "Health premiums are an adjustment to income on Schedule 1, not a Schedule C line. It belongs to the 1040 preparer."
+    },
+    {
+      "kind": "category-needs-judgement",
+      "severity": "medium",
+      "docIds": [
+        "doc_f37"
+      ],
+      "detail": "Standard mileage or actual vehicle costs give different figures and cannot be mixed. The method is chosen, not derived."
+    },
+    {
+      "kind": "missing-vendor-tax-id",
+      "severity": "low",
+      "docIds": [
+        "doc_f33"
+      ],
+      "detail": "Raman Consulting invoice 0031 prints no tax identification number, and a 1099-NEC needs one."
+    },
+    {
+      "kind": "possible-personal-expense",
+      "severity": "medium",
+      "docIds": [
+        "doc_f32"
+      ],
+      "detail": "Whole Foods Market, 142.88 of groceries on the business card."
+    },
+    {
+      "kind": "capitalisation-threshold",
+      "severity": "medium",
+      "docIds": [
+        "doc_f30"
+      ],
+      "detail": "MacBook Pro at 2,899.00 is above the 2,500.00 capitalisation threshold and has a useful life over a year."
+    },
+    {
+      "kind": "contractor-1099-threshold",
+      "severity": "medium",
+      "docIds": [
+        "doc_f33",
+        "doc_f34"
+      ],
+      "detail": "Raman Consulting totals 7,700.00 in the period, over the 600.00 1099-NEC threshold. Invoice 0031 has no tax id on it."
+    },
+    {
+      "kind": "contractor-1099-threshold",
+      "severity": "medium",
+      "docIds": [
+        "doc_f39"
+      ],
+      "detail": "Bright Anvil Labs totals 3,400.00 in the period, over the 600.00 threshold."
+    },
+    {
+      "kind": "backdated-document",
+      "severity": "high",
+      "docIds": [
+        "doc_f39"
+      ],
+      "ledgerRefs": [
+        "0442"
+      ],
+      "detail": "Bright Anvil 0442 is dated 2025-04-02 against a ledger entry posted 2025-03-27, and after the period end. Escalate to the tax manager immediately."
+    }
+  ],
+  "expectedClean": [
+    {
+      "docId": "doc_f35",
+      "why": "Contract labour, tax id printed, 520.00 in the period — below the 600.00 threshold. Nothing should be raised."
+    },
+    {
+      "docId": "doc_f24",
+      "why": "Business meals at 50%. The haircut is an adjustment on the form line, not an exception."
+    },
+    {
+      "docId": "doc_f08",
+      "why": "A credit note is negative revenue, not an error. It belongs on Schedule C line 2."
+    },
+    {
+      "docId": "doc_f09",
+      "why": "A payout report carries three figures. Only the 611.20 of fees is an expense; the gross is revenue already invoiced."
+    }
+  ],
+  "expectedExceptionCounts": {
+    "duplicate-document": 1,
+    "total-mismatch": 1,
+    "ledger-amount-mismatch": 1,
+    "missing-support": 3,
+    "unmatched-document": 4,
+    "unreadable-document": 1,
+    "missing-period": 1,
+    "out-of-period": 1,
+    "currency-mismatch": 1,
+    "low-confidence-category": 0,
+    "category-needs-judgement": 5,
+    "missing-vendor-tax-id": 1,
+    "possible-personal-expense": 1,
+    "capitalisation-threshold": 1,
+    "contractor-1099-threshold": 2,
+    "backdated-document": 1
+  },
+  "modelDependentExceptions": {
+    "low-confidence-category": {
+      "likelyDocIds": [
+        "doc_f29",
+        "doc_f37"
+      ],
+      "why": "An image-only scan and a mileage log with no vendor, no total and no invoice number are the two documents a classifier has least to work with. Whether confidence lands below reviewConfidence is the model's call, so this is reported as drift rather than asserted."
+    },
+    "category-needs-judgement (doc_f29)": {
+      "likelyDocIds": [
+        "doc_f29"
+      ],
+      "why": "An unreadable scan most plausibly lands in `uncategorised`, which carries alwaysReview and would add a sixth category-needs-judgement. It is not counted above because which category a model picks for a page it could not read is not a printed fact."
+    }
+  },
+  "notes": [
+    "truth is what a correct extraction returns, not an assertion. Compare numerically, and compare dates and vendor names case-insensitively; a model that reads 1,842.19 as 1842.19 has not made a mistake.",
+    "expectedFindings is the count the register should hold; a document's expectedExceptions is the list of flags attached to that file. They differ because one finding can name two documents, so do not sum the per-document lists.",
+    "aws-invoice-mar-2025 is deliberately absent. The ledger carries the March AWS charge and no document supports it.",
+    "doc_f25 and doc_f26 are byte-identical on purpose. The '(1)' in the second filename is the only human-visible tell.",
+    "doc_f29 has no text layer at all. Any extraction that returns a vendor or a total for it has invented one.",
+    "Nothing in this corpus has been filed, and no figure in it is advice."
+  ]
+}

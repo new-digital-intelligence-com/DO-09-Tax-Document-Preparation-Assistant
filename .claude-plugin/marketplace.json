@@ -1,0 +1,35 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ndi-tax",
+  "owner": {
+    "name": "New Digital Intelligence",
+    "url": "https://new-digital-intelligence.com"
+  },
+  "description": "NDI's Tax Document Preparation Assistant plugin for Claude Code and the Claude app, installable straight from this repo.",
+  "plugins": [
+    {
+      "name": "do-09-tax-prep",
+      "source": "./plugins/do-09-tax-prep",
+      "displayName": "DO-09 — Tax Document Preparation Assistant",
+      "description": "Collect invoices and receipts for a filing period, categorise them against the firm's chart, reconcile them against the ledger, flag every discrepancy for a human, and assemble a review-ready package of DRAFT forms. It files nothing.",
+      "author": {
+        "name": "New Digital Intelligence"
+      },
+      "category": "finance",
+      "keywords": [
+        "tax-preparation",
+        "bookkeeping",
+        "receipts",
+        "invoices",
+        "expense-categorisation",
+        "reconciliation",
+        "schedule-c",
+        "1099-nec",
+        "google-drive",
+        "gmail",
+        "ndi",
+        "do-09"
+      ]
+    }
+  ]
+}
