@@ -13,10 +13,15 @@ state this app keeps, so no connector can reach them:
 | Review packages | The assembled pack, its markdown, and who it was handed to |
 | The audit trail | Append-only history of every action and every refusal, with the note the person typed |
 
-When the app is running (default `http://localhost:3000`), drive these over
-HTTP. There is no environment variable for the base URL; if it runs elsewhere,
-ask once and use that for the session. When it is not running, say so plainly
-rather than answering as though the register had been consulted.
+`$APP` in every example below is the base URL. It is the deployment —
+`https://do-09-tax-document-preparation-assi.vercel.app` — except in Claude
+Code, where a dev server on port 3000 of the local machine is tried first. The
+SKILL says which applies where; in the Claude app there is no local machine, so
+only the deployment exists.
+
+If the app runs somewhere else again, ask once and use that for the session.
+When nothing answers, say so plainly rather than answering as though the
+register had been consulted.
 
 Check it is up before relying on it: `GET /api/status` returns the period, the
 counts and whether a model is configured.
@@ -81,7 +86,7 @@ by severity, `money`, the `forms` generated so far, `latestPackageId`, `sources`
 and `preparerConfigured` / `taxManagerConfigured`.
 
 ```bash
-curl -s localhost:3000/api/status
+curl -s "$APP/api/status"
 ```
 
 ```json
@@ -127,7 +132,7 @@ The whole chart from `src/lib/categories.ts`, each entry with the period's
 `recorded`, `deductible` and `docCount` against it.
 
 ```bash
-curl -s localhost:3000/api/categories
+curl -s "$APP/api/categories"
 ```
 
 `recorded` and `deductible` differ where `deductiblePct` does, and the difference
@@ -182,7 +187,7 @@ missing file, not a missing document, and the difference is the finding.
 Removing one needs a reason:
 
 ```bash
-curl -s -X DELETE localhost:3000/api/documents/doc_f26 \
+curl -s -X DELETE "$APP/api/documents/doc_f26" \
   -H 'content-type: application/json' \
   -d '{"reason":"Second byte-identical copy of the Adobe invoice; the Drive sync saved it twice. Confirmed with Dana."}'
 ```
@@ -200,7 +205,7 @@ POST /api/extract   {docId?, limit?}
 queue. Returns `{run, extracted, unreadable, failed, results}`.
 
 ```bash
-curl -s -X POST localhost:3000/api/extract -H 'content-type: application/json' -d '{"limit":10}'
+curl -s -X POST "$APP/api/extract" -H 'content-type: application/json' -d '{"limit":10}'
 ```
 
 **`unreadable` is a first-class outcome, not an error.** A scan with no legible
@@ -230,7 +235,7 @@ human's rather than overwritten — six months later the useful question is not
 "what category is this" but "did the assistant get this wrong, and how often".
 
 ```bash
-curl -s -X POST localhost:3000/api/classify/override \
+curl -s -X POST "$APP/api/classify/override" \
   -H 'content-type: application/json' \
   -d '{"docId":"doc_f30","categoryId":"expense-depreciation",
        "note":"MacBook Pro at 2,899.00 is over the capitalisation threshold. Moving it off office expense pending Dana deciding between de minimis and section 179."}'
@@ -301,7 +306,7 @@ Closing one is a human action with a required note, and `accept` picks between
 two genuinely different claims about the period:
 
 ```bash
-curl -s -X POST localhost:3000/api/exceptions/resolve \
+curl -s -X POST "$APP/api/exceptions/resolve" \
   -H 'content-type: application/json' \
   -d '{"id":"exc_7t2","accept":true,
        "note":"The 18.00 gap is a card fee AWS netted off the payment. Checked against the January statement; both figures on the invoice are right."}'
@@ -327,8 +332,8 @@ POST /api/forms   {formId?}     generate one, or all three
 ```
 
 ```bash
-curl -s "localhost:3000/api/forms?formId=schedule-c"
-curl -s -X POST localhost:3000/api/forms -H 'content-type: application/json' -d '{}'
+curl -s "$APP/api/forms?formId=schedule-c"
+curl -s -X POST "$APP/api/forms" -H 'content-type: application/json' -d '{}'
 ```
 
 **404** for a `formId` that has not been generated for this period yet — which is
@@ -368,8 +373,8 @@ form that predates the categorisation behind it. A stale figure in a pack
 somebody is about to file from is worse than no pack.
 
 ```bash
-curl -s -X POST localhost:3000/api/packages -H 'content-type: application/json' -d '{}'
-curl -s -X POST localhost:3000/api/packages/handoff \
+curl -s -X POST "$APP/api/packages" -H 'content-type: application/json' -d '{}'
+curl -s -X POST "$APP/api/packages/handoff" \
   -H 'content-type: application/json' \
   -d '{"packageId":"pkg_9d1","to":"dana.whitfield@new-digital-intelligence.com",
        "note":"2025 Q1 for review. Nine items still open, four of them high — the Northgate invoice whose lines do not add up to its total is the one to look at first."}'
@@ -405,7 +410,7 @@ here" and "it was deleted on Tuesday, with a reason" are different answers and
 usually only one of them is true.
 
 ```bash
-curl -s "localhost:3000/api/audit?action=exception&limit=50"
+curl -s "$APP/api/audit?action=exception&limit=50"
 ```
 
 Every irreversible action carries the note the person typed. Refusals are in
@@ -435,7 +440,7 @@ body comes back **400** rather than as fluent invention — a drafted note that
 invents a reason closes a finding on grounds nobody ever offered.
 
 ```bash
-curl -s -X POST localhost:3000/api/assist -H 'content-type: application/json' \
+curl -s -X POST "$APP/api/assist" -H 'content-type: application/json' \
   -d '{"kind":"vendor-request","vendor":"Amazon Web Services",
        "entity":"Northwind Studio LLC","sendTo":"accounts@northwind.studio",
        "items":[{"date":"2025-03-31","amount":2190.44,"currency":"USD","note":"billed either side of this month, nothing on file for March"}]}'

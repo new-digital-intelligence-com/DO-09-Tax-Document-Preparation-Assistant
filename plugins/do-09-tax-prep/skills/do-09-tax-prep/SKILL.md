@@ -196,12 +196,32 @@ second person reviewing before anything is filed is the whole point.
 The app and this skill share one register in one Drive folder, so there is no
 "the app's data" and "your data" — there is the workspace, and two ways in.
 
-If `http://localhost:3000` answers, **prefer its HTTP API** for anything it
-covers. It writes the record and the audit row in the same step and enforces the
-rules in code rather than in a prompt, which is strictly safer than doing the
-same edits by hand. See [references/app-api.md](references/app-api.md). There is
-no environment variable for the base URL; if it runs elsewhere, ask once and use
-that for the session.
+**Prefer the app's HTTP API** for anything it covers. It writes the record and
+the audit row in the same step and enforces the rules in code rather than in a
+prompt, which is strictly safer than making the same edits by hand. See
+[references/app-api.md](references/app-api.md).
+
+Two base URLs, and which one is reachable depends on where you are running:
+
+```
+https://do-09-tax-document-preparation-assi.vercel.app    the deployment
+http://localhost:3000                                      a dev server on this machine
+```
+
+**In the Claude app or on claude.ai, only the deployment exists.** You are not
+on the user's computer, so `localhost` is not their machine — it is nothing at
+all, and a call to it fails in a way that looks like the app being down. Never
+try it there.
+
+**In Claude Code, try `localhost:3000` first**, then the deployment. A dev
+server running beside the repo is the code as it is now, including changes that
+have not been deployed; the deployment is the code as it was at the last push.
+Reading one and reporting the other is how a confusing bug report gets written.
+
+Say which you used the first time it matters in a conversation. If neither
+answers, work through the Drive connector against the same folder — see
+[references/workspace.md](references/workspace.md) — and say that is what you
+did.
 
 If it does not answer, do the same work through the Drive connector against the
 same files, following [references/workspace.md](references/workspace.md). The
