@@ -513,16 +513,50 @@ export function forgetWorkspace(): void {
 }
 
 /**
- * Move a file to Drive's trash, reversibly.
+ * Move a file to Drive's trash, reversibly, and only from a folder it may.
  *
- * Used when a document turns out not to belong in the shared workspace —
- * declined as out of scope, or explicitly removed from the register. Trash
- * rather than permanent deletion: a person who uploaded the wrong file by
+ * Trash rather than permanent deletion: a person who uploaded the wrong file by
  * mistake can still recover it from Drive's own trash, and this app has no
  * "are you sure, really" step of its own to put in front of something
  * unrecoverable.
+ *
+ * ## Why the parent is checked
+ *
+ * Every caller passes an id it read out of the register — a document's
+ * `sourceRef`, or the result of looking up a cache entry by hash. Those ids are
+ * data, and data can be wrong: written by an older version, mangled by a
+ * partial write, or pointing at a file somebody moved. Without a check, one
+ * wrong id in `documents.json` turns "delete this invoice" into "trash whatever
+ * that id happens to name", and the ids sitting right next to it in the same
+ * folder belong to `classifications.json` and the audit trail.
+ *
+ * That is not hypothetical. It happened: a delete trashed `state/
+ * classifications.json`, and every document in the workspace read back as
+ * uncategorised — no error, no failed request, just a register that had
+ * silently lost its categorisations while continuing to look like a working
+ * app reporting zero.
+ *
+ * So a caller now says which folders the file is allowed to be in, and a file
+ * anywhere else is refused rather than trashed. The register's own folder is
+ * never in that list, so no id read out of the register can ever destroy it.
+ * A refusal is loud on purpose: it means a `sourceRef` is wrong and somebody
+ * should know, which is strictly better than a file quietly disappearing.
  */
-export async function trashFile(fileId: string): Promise<void> {
+export async function trashFile(fileId: string, allowedParents?: string[]): Promise<void> {
+  if (allowedParents && allowedParents.length > 0) {
+    const response = await call(`/files/${fileId}?fields=id,name,parents&supportsAllDrives=true`);
+    const file = (await response.json()) as { name?: string; parents?: string[] };
+    const parents = file.parents ?? [];
+
+    if (!parents.some((parent) => allowedParents.includes(parent))) {
+      throw new Error(
+        `Refusing to trash ${file.name ?? fileId}: it is not in this workspace's input or output ` +
+          `folder. Something in the register points at the wrong file, and deleting it would ` +
+          `destroy something that was never asked for.`,
+      );
+    }
+  }
+
   await call(`/files/${fileId}?supportsAllDrives=true`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },

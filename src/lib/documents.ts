@@ -337,7 +337,7 @@ export async function withdrawFromWorkspace(id: string, actor: string, reason: s
   const doc = await getDocument(id);
   if (!doc?.sourceRef) return;
   try {
-    await trashFile(doc.sourceRef);
+    await trashFile(doc.sourceRef, [(await workspace()).inputId]);
   } catch (error) {
     await record({
       actor,
@@ -445,13 +445,33 @@ export async function removeDocument(id: string, actor: string, reason: string):
     },
   );
 
+  let fileNote = "The file was trashed on Drive.";
   if (doc.sourceRef) {
     try {
-      await trashFile(doc.sourceRef);
-    } catch {
-      // The register no longer lists this document either way; a file that
-      // could not be trashed is a Drive-side cleanup task, not a reason to
-      // fail the deletion the person actually asked for.
+      await trashFile(doc.sourceRef, [(await workspace()).inputId]);
+    } catch (error) {
+      /*
+       * The deletion still stands — the register no longer lists this
+       * document — but what went wrong is written down rather than swallowed.
+       *
+       * A refusal here is the important case: it means this row's `sourceRef`
+       * names a file outside `input/`, which is a corrupt pointer and the
+       * thing that would, without the guard, have destroyed whatever it named.
+       * Silence would leave a workspace with a bad row in it and nobody aware.
+       */
+      const why = error instanceof Error ? error.message : "unknown error";
+      fileNote = `The file could NOT be trashed on Drive: ${why}`;
+      await record({
+        actor,
+        action: "document.file-not-trashed",
+        subject: doc.id,
+        result: "error",
+        detail:
+          `${doc.filename} was removed from the register, but its file could not be trashed: ` +
+          `${why} Its sourceRef was ${doc.sourceRef}. Check that row before deleting anything else.`,
+        periodId: doc.periodId,
+        docId: doc.id,
+      });
     }
   }
 
@@ -464,7 +484,7 @@ export async function removeDocument(id: string, actor: string, reason: string):
       `Deleted ${doc.filename} (${doc.id}, sha256 ${doc.sha256.slice(0, 12)}, ingested ` +
       `${doc.ingestedAt} from ${doc.source}) along with its extraction and categorisation. ` +
       `${findings.dropped} finding(s) dropped and ${findings.narrowed} narrowed to their other ` +
-      `documents. The file was trashed on Drive. Reason: ${note}`,
+      `documents. ${fileNote} Reason: ${note}`,
     periodId: doc.periodId,
     docId: doc.id,
   });

@@ -187,7 +187,7 @@ export async function dropCachedResult(sha256: string): Promise<boolean> {
     const folders = await workspace();
     const hit = await findInFolder(folders.outputId, resultName(sha256));
     if (!hit) return false;
-    await trashFile(hit.id);
+    await trashFile(hit.id, [folders.outputId]);
     return true;
   } catch {
     // A cached result that could not be trashed leaves a stale file in
