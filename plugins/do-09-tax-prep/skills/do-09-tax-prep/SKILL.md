@@ -35,8 +35,10 @@ software", or nothing at all — your first action is:
    **`1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`**. Each one is somebody's workspace.
 2. Read each `profile.json` for the name, and the document count from
    `state/documents.json` where you can get it cheaply.
-3. **Put them to the user as tappable options** — "Helmi · Entity not set · 41
-   documents" — with a final option to **start a new workspace**.
+3. **Put them to the user as tappable options**, shaped
+   `<name> · <entity> · <n> documents` — **every value read from that
+   workspace's own files, never from an example.** Add a final option to
+   **start a new workspace**.
 4. Wait for the answer. Do not proceed on a guess.
 
 Only after they have chosen do you read a document, quote a figure, search
@@ -122,6 +124,33 @@ Every one of these is a register question, not a mailbox question:
 - "Did Z bill me this quarter?"
 - "What is missing?"
 - "Have I got anything from <vendor>?"
+
+## Every name and number you say comes from a file you opened
+
+**No exceptions, and this includes examples in these instructions.** The counts,
+labels, entity names, email addresses and dates written anywhere in this skill
+or its references are *shapes*, showing you the form of an answer. They are not
+data about anybody, and repeating one as though it were is inventing a fact.
+
+The failure is specific and it has happened: a reviewer's name appeared in an
+answer as the person a package had been handed to. That name was an example in
+these instructions. The package had actually gone to a completely different
+address, which was recorded in the workspace and could have been read.
+
+So, every time:
+
+- **The reviewer's name and address** come from `settings.json` and the handoff
+  record in `state/`. Never from an example, never a plausible-sounding name.
+- **The document count, the open-item count, the totals** are counted from the
+  files, on the spot. Not remembered from earlier in the conversation and not
+  carried over from a previous run — documents get added and deleted between
+  turns, so a number you are not re-reading is a number that may be stale.
+- **The period label and dates** come from `settings.json`.
+- **A vendor, an amount, a date** come from the extraction row.
+
+If you have not opened the file this turn, you do not know the number. Read it
+or do not state it. Saying "41 documents" because 41 was true ten minutes ago is
+the same class of error as saying it because it appeared in an example.
 
 ## Never try to carry a file's bytes yourself
 
@@ -408,8 +437,9 @@ a question, and it goes in the form with real options to tap.
 This is not a stylistic preference. A person working a quarter is looking at
 their documents, not at a chat box; a question written as prose makes them stop,
 type, and often go and look something up you could have fetched. Options they
-can tap keep the work moving and make the choice exact — "2025 Q1, 1 Jan to 31
-Mar, 41 documents" cannot be misread the way "which period?" can.
+can tap keep the work moving and make the choice exact: an option carrying the
+period's real label, its real dates and its real document count cannot be
+misread the way "which period?" can.
 
 Its name differs by surface: **`ask_user_input_v0`** in the Claude app,
 **`AskUserQuestion`** in Claude Code. Use whichever is in your toolset. Not
@@ -420,7 +450,7 @@ other, and failing both, use a numbered list.
 |---|---|
 | **Which workspace** | **The real folders under the shared root, each with its entity and document count — plus "start a new one". This is the first question of every conversation.** |
 | A name for a new workspace | Ask plainly, and offer their own name and the entity name as candidates rather than an empty box |
-| Which period | The real periods in the workspace, with their dates and status — "2025 Q1, 1 Jan to 31 Mar, open" |
+| Which period | The real periods in the workspace, with their own dates and status read from `settings.json` |
 | Which documents to import from their Drive | The real files your search found, by filename with the date and size — never "shall I search?" |
 | Whether to delete a document | The document named with its vendor and amount, and what goes with it, against "keep it" |
 | A reason for a deletion | Two or three plausible ones — duplicate, personal, wrong entity — plus their own words |

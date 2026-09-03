@@ -5,7 +5,14 @@ both surfaces — the web app and this skill — read and write the same folder.
 document uploaded in the app is a document you can read here; a category you
 record here is one the app shows on its next load. There is no second register.
 
-**Root folder id: `1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`**
+**Root folder id: `1-ih1p1p9tSBDCCYSXI4lPsxawXUxhQ30`** — this one value is real
+configuration. It is the only literal in this file you should ever use as-is.
+
+> **Everything else here is a shape, not data.** Every folder name, document id,
+> vendor, amount, date, count and email in the examples below is made up to show
+> the form of a record. None of them describes anybody's workspace. Read the
+> real values out of the real files, every time; repeating one of these as
+> though it were a fact is inventing one.
 
 You reach it with **the user's own Google Drive connector**. You have no
 credentials of your own and need none — the app has its own OAuth client for its

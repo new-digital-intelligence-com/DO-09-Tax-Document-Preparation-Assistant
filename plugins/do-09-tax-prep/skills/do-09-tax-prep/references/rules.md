@@ -37,7 +37,8 @@ So: no submission, no e-file, no signature, no "marking it final", no telling a
 portal that a period is closed, and no sentence that lets a reader believe any
 of those happened. The words to avoid are as load-bearing as the actions —
 "filed", "submitted", "lodged", "sent to the IRS", "done for the quarter". Say
-"drafted", "assembled", "handed to Dana for review".
+"drafted", "assembled", "handed to <the named reviewer> for review" — and that
+name comes from the workspace, never from an example in this file.
 
 Say DRAFT whenever you quote a figure off a form. A number read out of context
 becomes a number someone repeats to their accountant.
@@ -136,7 +137,7 @@ drafts, assembling a package, handing one to a person, removing a document,
 sending mail.
 
 State the consequence rather than asking whether to proceed. "Assembles the
-2025 Q1 package from 39 documents with 9 items still open, and marks the period
+the period's package from its documents with its open items still on it, and marks the period
 packaged" is a decision someone can take. "Are you sure?" is not — it asks a
 person to agree to something you have not told them.
 
