@@ -1,6 +1,7 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { driveConfigured, findInFolder, listRootFolders, putJson, readTextFile } from "./drive";
 
 /**
  * Who the workspace is being prepared for.
@@ -111,6 +112,112 @@ export async function listUsers(): Promise<User[]> {
   return [...registry.users].sort(
     (a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt),
   );
+}
+
+/**
+ * Recognise a name found on Drive that this machine has never heard of before.
+ *
+ * A workspace folder is `<slug>-<uniqueid>` — see `createUser`. The slug is
+ * everything before the last hyphen-delimited chunk, which is deliberately
+ * simple rather than parsed against `slugify`'s exact alphabet: a folder this
+ * old may predate a change to that function, and a name is worth recovering
+ * even from a folder this code did not itself create.
+ */
+function nameFromFolderName(folderName: string): string {
+  const withoutId = folderName.replace(/-[a-z0-9]+$/i, "");
+  const words = (withoutId || folderName).split("-").filter(Boolean);
+  return words.map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || folderName;
+}
+
+/**
+ * Reconcile the local registry against what Drive actually holds.
+ *
+ * The registry file lives on one machine; the folders on Drive are shared.
+ * Opening this app from a different machine, or from a `.data` directory that
+ * was wiped, must not show "no workspaces" while Drive is sitting on three
+ * folders full of documents — those folders ARE the fact of who has a
+ * workspace, and this is what makes a second machine see them.
+ *
+ * Read-heavy and safe to call on every page load: it only writes when it finds
+ * something new. A Drive read failure falls back to the local list rather than
+ * wiping it — an outage must read as an outage, never as "there are no users".
+ */
+export async function syncUsersFromDrive(): Promise<User[]> {
+  if (!driveConfigured()) return listUsers();
+
+  let folders: { id: string; name: string }[];
+  try {
+    folders = await listRootFolders();
+  } catch {
+    return listUsers();
+  }
+
+  const registry = await readRegistry();
+  const byFolderName = new Map(registry.users.map((user) => [user.driveFolderName, user]));
+  const users = [...registry.users];
+  let changed = false;
+
+  for (const folder of folders) {
+    const known = byFolderName.get(folder.name);
+    if (known) {
+      if (known.driveFolderId !== folder.id) {
+        known.driveFolderId = folder.id;
+        changed = true;
+      }
+      continue;
+    }
+
+    // A folder Drive has that this machine has never recorded. Read its
+    // profile if one was written; recover a plausible name from the folder
+    // name if not, and back-fill the profile so the NEXT machine to see this
+    // folder does not have to guess either.
+    let profile: { id: string; name: string; slug: string; createdAt: string } | undefined;
+    try {
+      const file = await findInFolder(folder.id, "profile.json");
+      if (file) profile = JSON.parse(await readTextFile(file.id));
+    } catch {
+      profile = undefined;
+    }
+
+    const recovered: User = profile
+      ? {
+          id: profile.id,
+          name: profile.name,
+          slug: profile.slug,
+          driveFolderId: folder.id,
+          driveFolderName: folder.name,
+          createdAt: profile.createdAt,
+        }
+      : {
+          id: folder.name,
+          name: nameFromFolderName(folder.name),
+          slug: slugify(nameFromFolderName(folder.name)),
+          driveFolderId: folder.id,
+          driveFolderName: folder.name,
+          createdAt: new Date().toISOString(),
+        };
+
+    users.push(recovered);
+    changed = true;
+
+    if (!profile) {
+      try {
+        await putJson(folder.id, "profile.json", {
+          id: recovered.id,
+          name: recovered.name,
+          slug: recovered.slug,
+          createdAt: recovered.createdAt,
+        });
+      } catch {
+        // The recovered name is still usable locally even if the write-back
+        // fails; the next machine simply has to recover it the same way.
+      }
+    }
+  }
+
+  if (changed) await writeRegistry({ ...registry, users });
+
+  return users.sort((a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt));
 }
 
 export async function getUser(id: string): Promise<User | undefined> {

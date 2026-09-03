@@ -260,6 +260,31 @@ export async function listFolder(folderId: string): Promise<DriveFile[]> {
   return files;
 }
 
+/**
+ * Every workspace folder directly under the shared root — one per user.
+ *
+ * This is what makes the workspace list shared rather than per-machine: a
+ * fresh checkout has no local record of anybody, but the folders on Drive are
+ * the actual fact of who has a workspace, and this is how a second machine
+ * finds them.
+ */
+export async function listRootFolders(): Promise<DriveFile[]> {
+  const status = driveStatus();
+  if (status.state !== "ready") throw new Error(status.detail);
+
+  const rootId = driveEnv().folderId;
+  const params = new URLSearchParams({
+    q: `'${rootId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: "files(id, name, mimeType, size, modifiedTime, md5Checksum)",
+    pageSize: "200",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  });
+  const response = await call(`/files?${params.toString()}`);
+  const body = (await response.json()) as { files?: DriveFile[] };
+  return body.files ?? [];
+}
+
 export async function findInFolder(folderId: string, name: string): Promise<DriveFile | undefined> {
   const escaped = name.replace(/'/g, "\\'");
   const params = new URLSearchParams({
@@ -433,7 +458,21 @@ export async function workspace(): Promise<Workspace> {
     }
   }
   if (!userFolderId) {
-    userFolderId = await ensureFolder(rootId, user.driveFolderName);
+    const existing = await findInFolder(rootId, user.driveFolderName);
+    if (existing) {
+      userFolderId = existing.id;
+    } else {
+      userFolderId = await ensureFolder(rootId, user.driveFolderName);
+      // Written once, at creation, so a second machine that has never heard
+      // of this user can still recover the real name and creation date from
+      // the folder itself rather than guessing at the id in its name.
+      await putJson(userFolderId, "profile.json", {
+        id: user.id,
+        name: user.name,
+        slug: user.slug,
+        createdAt: user.createdAt,
+      });
+    }
     await rememberDriveFolder(user.id, userFolderId);
   }
 
