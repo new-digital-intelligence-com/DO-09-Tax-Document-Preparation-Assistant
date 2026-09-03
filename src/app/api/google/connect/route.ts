@@ -1,6 +1,7 @@
 import { requireActiveUser } from "@/lib/users";
 import { accountConsentUrl } from "@/lib/google-account";
 import { driveStatus } from "@/lib/drive";
+import { redirectMismatch } from "@/lib/redirect-check";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,12 @@ export const runtime = "nodejs";
  * user id that arrived as a parameter would let anyone who can reach this URL
  * start an authorisation that lands in somebody else's workspace.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Checked before redirecting, so a misconfiguration is reported here
+  // rather than as an opaque Google error page.
+  const mismatch = redirectMismatch(request);
+  if (mismatch) return new Response(mismatch, { status: 503 });
+
   const status = driveStatus();
   if (status.state === "unconfigured") {
     return new Response(status.detail, { status: 503 });

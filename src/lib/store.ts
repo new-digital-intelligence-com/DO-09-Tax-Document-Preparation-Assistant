@@ -22,10 +22,23 @@ import { findInFolder, putJson, readTextFile, workspace } from "./drive";
  * than asked of Drive on every call — it is not data, it is a queue, gone the
  * moment this process exits, and it exists only to stop two writes landing on
  * the same collection from this one process at the same moment. It cannot and
- * does not protect against a second machine writing to the same Drive folder
- * at the same time; nothing in a shared-folder-of-JSON-files design can. That
- * risk is accepted, not solved, the same way it always was the moment more
- * than one machine could touch the same workspace.
+ * does not protect against a second *process* writing to the same Drive folder
+ * at the same time; nothing in a shared-folder-of-JSON-files design can.
+ *
+ * That limit is worth stating precisely, because deploying changes how often it
+ * bites. Run locally there is one process, so the queue covers every write the
+ * app makes and the gap only opens when a second machine is pointed at the same
+ * workspace. Run on a serverless platform there is no single process at all:
+ * two concurrent requests can land on two instances, each reads the same
+ * collection, and the second write silently discards the first. The window is
+ * small — a read and a write, a second or so — and the collections that take
+ * concurrent writes in practice are the ones a bulk run touches.
+ *
+ * This is accepted rather than solved. Solving it needs a lock the store does
+ * not have, and Drive offers nothing to build one from. What must not happen is
+ * pretending otherwise: if two people work one workspace simultaneously on a
+ * hosted deployment, a row can be lost, and the audit trail is where that shows
+ * up as a gap rather than as an error.
  *
  * Every other module reaches this through `readStore` / `writeStore` /
  * `mutate` / `append`, unaware that the ground underneath changed — the

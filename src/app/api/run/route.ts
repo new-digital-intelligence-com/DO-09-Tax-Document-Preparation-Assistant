@@ -7,7 +7,7 @@ import { modelConfigured } from "@/lib/anthropic";
 import { body, failed, ok } from "@/lib/http";
 
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 /**
  * What a run would do, before doing it.

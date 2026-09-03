@@ -37,24 +37,54 @@ function page(title: string, body: string, tone: "ok" | "bad") {
   );
 }
 
-/** Replace the key in place if it is there, append it if it is not. */
-async function storeRefreshToken(token: string): Promise<void> {
+/**
+ * Put the refresh token where the next boot will find it.
+ *
+ * On a machine with a writable disk that is `.env.local`, and the token never
+ * reaches a browser. That is the right shape: it is a long-lived credential,
+ * and a page that prints one puts it in a browser history, a screenshot and a
+ * support ticket, and revoking it afterwards is the step nobody remembers.
+ *
+ * On a hosted deployment there is no writable disk. Vercel, Netlify and every
+ * container platform serve from a read-only filesystem, and even where a write
+ * appears to succeed the instance is thrown away minutes later — so a token
+ * written to disk there is lost, and the connection silently stops working
+ * within the hour when the access token expires.
+ *
+ * There is no third option. The token has to reach the platform's environment
+ * settings, and the only route from Google's callback to there runs through the
+ * person doing the setup. So on a read-only filesystem it is shown once, with
+ * what to do with it, rather than written into the void and reported as
+ * connected. Returning `"shown"` is what tells the page which of the two
+ * happened, because telling somebody their connection is stored when it was not
+ * is worse than asking them to paste a value.
+ */
+async function storeRefreshToken(token: string): Promise<"written" | "shown"> {
   let contents = "";
   try {
     contents = await readFile(ENV_PATH, "utf8");
   } catch {
-    // No .env.local yet: appending creates it.
+    // No .env.local yet. Not an error: appending creates it.
   }
 
-  if (/^GOOGLE_REFRESH_TOKEN=.*$/m.test(contents)) {
-    await writeFile(
-      ENV_PATH,
-      contents.replace(/^GOOGLE_REFRESH_TOKEN=.*$/m, `GOOGLE_REFRESH_TOKEN=${token}`),
-      "utf8",
-    );
-    return;
+  try {
+    if (/^GOOGLE_REFRESH_TOKEN=.*$/m.test(contents)) {
+      await writeFile(
+        ENV_PATH,
+        contents.replace(/^GOOGLE_REFRESH_TOKEN=.*$/m, `GOOGLE_REFRESH_TOKEN=${token}`),
+        "utf8",
+      );
+    } else {
+      await appendFile(
+        ENV_PATH,
+        `${contents.endsWith("\n") || !contents ? "" : "\n"}GOOGLE_REFRESH_TOKEN=${token}\n`,
+        "utf8",
+      );
+    }
+    return "written";
+  } catch {
+    return "shown";
   }
-  await appendFile(ENV_PATH, `${contents.endsWith("\n") ? "" : "\n"}GOOGLE_REFRESH_TOKEN=${token}\n`, "utf8");
 }
 
 export async function GET(request: Request) {
@@ -143,9 +173,10 @@ export async function GET(request: Request) {
    * so that attempt fails too.
    */
   let refreshToken: string;
+  let stored: "written" | "shown";
   try {
     refreshToken = (await exchangeCode(code)).refreshToken;
-    await storeRefreshToken(refreshToken);
+    stored = await storeRefreshToken(refreshToken);
   } catch (cause) {
     return page(
       "Could not complete the connection",
@@ -181,12 +212,48 @@ export async function GET(request: Request) {
       action: "drive.connected",
       subject: driveEnv().folderId,
       result: "ok",
-      detail: "Drive access granted and the refresh token stored in .env.local.",
+      detail:
+        stored === "written"
+          ? "Drive access granted and the refresh token stored in .env.local."
+          : "Drive access granted. The filesystem is read-only, so the refresh token was shown " +
+            "once for the operator to put into the deployment's environment settings rather " +
+            "than written to disk.",
     });
   } catch {
     // The audit trail is scoped to a user and nobody may have chosen one.
     // Failing to note this is a far smaller problem than refusing a connection
     // that succeeded.
+  }
+
+  if (stored === "shown") {
+    /*
+     * The one place this app prints a credential, and only because there is
+     * nowhere else for it to go.
+     *
+     * A hosted deployment has no writable disk and no persistent instance, so
+     * the token cannot be saved from here — it has to reach the platform's own
+     * environment settings, and the only path from Google's callback to there
+     * runs through the person reading this page. Saying "connected" and writing
+     * it nowhere would be the worse option: everything works until the access
+     * token expires an hour later, and then nothing does, with no clue why.
+     *
+     * It is shown once and never logged, and the page says plainly to treat it
+     * as compromised if it goes anywhere it should not.
+     */
+    return page(
+      "Almost connected — one value to copy",
+      `<p>Google granted access. This deployment has a <strong>read-only filesystem</strong>, so ` +
+        `the refresh token could not be saved here and must go into your hosting platform's ` +
+        `environment settings.</p>` +
+        `<p>Set <code>GOOGLE_REFRESH_TOKEN</code> to:</p>` +
+        `<p style="word-break:break-all;background:#f3f3f1;border:1px solid #e3e3e0;` +
+        `border-radius:8px;padding:12px;font:12px/1.5 ui-monospace,monospace">${refreshToken}</p>` +
+        `<p>Then redeploy. Until you do, nothing can reach the workspace folder.</p>` +
+        `<p><strong>This is a long-lived credential.</strong> It is shown here once and is not ` +
+        `written to any log. If it reaches a screenshot, a chat or a ticket, revoke it at ` +
+        `<code>myaccount.google.com/permissions</code> and connect again.</p>`,
+      "ok",
+    );
   }
 
   return page(

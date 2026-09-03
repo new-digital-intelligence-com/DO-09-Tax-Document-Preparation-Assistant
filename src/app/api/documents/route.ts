@@ -3,7 +3,7 @@ import { activePeriod, preparer } from "@/lib/settings";
 import { bad, failed, ok } from "@/lib/http";
 
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 /** The period's corpus, joined with whatever has been read off each document. */
 export async function GET() {

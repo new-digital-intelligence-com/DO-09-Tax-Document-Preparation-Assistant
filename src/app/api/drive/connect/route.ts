@@ -1,4 +1,5 @@
 import { consentUrl, driveEnv, driveStatus } from "@/lib/drive";
+import { redirectMismatch } from "@/lib/redirect-check";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,12 @@ export const runtime = "nodejs";
  * A redirect rather than a printed URL: the whole point of doing this in the
  * app is that nobody has to copy a code between a terminal and a browser.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Checked before redirecting, so a misconfiguration is reported here
+  // rather than as an opaque Google error page.
+  const mismatch = redirectMismatch(request);
+  if (mismatch) return new Response(mismatch, { status: 503 });
+
   const status = driveStatus();
   if (status.state === "unconfigured") {
     return new Response(status.detail, { status: 503 });
