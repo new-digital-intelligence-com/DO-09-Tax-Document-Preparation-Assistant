@@ -73,6 +73,25 @@ Every one of these is a register question, not a mailbox question:
 - "What is missing?"
 - "Have I got anything from <vendor>?"
 
+## Never leave a second file behind
+
+**`state/` holds exactly one file per collection.** When you write one, you
+**overwrite the existing file in place**. You do not create a second file with
+the same name, and you do not create a backup before doing it — no `.bak`, no
+`-predelete`, no dated copy, not "just in case", not before a delete.
+
+Drive allows two files with the same name in one folder and reports no error.
+That is a register which has silently forked: one reader gets one copy, another
+gets the other, and the figures diverge with nothing to show that they have.
+
+Backups are already covered — Drive keeps version history on every file, deletes
+go to Drive's trash rather than being erased, and `state/audit.json` records
+what happened. A copy you leave in the folder adds none of that and costs the
+one property the folder must have.
+
+If you find two files with the same name, say so, keep the newer or fuller one,
+and remove the other. Never leave both.
+
 ## Google Drive has two modes, and they are not the same
 
 1. **The workspace folder** — the shared root and the user's folder inside it.
@@ -290,7 +309,7 @@ look something up is a turn spent asking permission to do the job.
 | Draft the forms | Arithmetic over the categorised documents — [references/forms.md](references/forms.md) says what feeds which line. Every line that was adjusted says why. Quote nothing off one without the word draft. |
 | Assemble the package | Open items first, then the totals, then the document index. Write it to `state/packages.json` and give them the markdown. |
 | Email the package | Confirm the recipient **as a form**, then send it with the Gmail connector from their own address, then record the handoff. Never send to check that it works. |
-| Delete a document | Ask for a reason first, as options. Then all six steps in the workspace reference — the row, the reading, the categorisation, the flags only about it, the file in `input/`, and `output/<sha256>.json`. |
+| Delete a document | Ask for a reason first, as options. Then all six steps in the workspace reference — the row, the reading, the categorisation, the flags only about it, the file in `input/`, and `output/<sha256>.json`. **Do not back up `state/` first.** Drive keeps version history and the trash; a copy left in the folder forks the register. |
 | Change the period's name, entity or dates | Edit `state/settings.json`. **Never change the period's id** — every document points at it. |
 | Trace something that is gone | `state/audit.json`, searched by filename. It is the only place a deleted document survives, so check it before telling anybody no record exists. |
 | Keep a record of the conversation | Write the transcript to `conversations/` as Markdown when the session produced figures worth keeping. Say where you put it; never claim it if the write failed. |

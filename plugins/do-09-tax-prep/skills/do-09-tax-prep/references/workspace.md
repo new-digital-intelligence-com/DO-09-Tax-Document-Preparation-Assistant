@@ -88,6 +88,47 @@ are in the first time you report anything from it, and do not silently switch.
 If the user asks about something that is plainly in another workspace, ask
 before crossing — as a form, naming both.
 
+## The folder holds the current state and nothing else
+
+**`state/` contains exactly one file per collection. Never more.** No backups,
+no copies, no dated variants, no snapshots, no `.bak`, no `-predelete`, no
+`-old`, no `-copy`. Not before a delete, not before a risky edit, not "just in
+case". If you are about to create a second file, stop: you are about to make
+the register ambiguous.
+
+This is not tidiness. Two files called `classifications.json` in one folder is a
+register that has silently forked. Drive allows duplicate names, so nothing
+errors — one process reads one copy and writes to it, another reads the other,
+and the categorisations diverge with no sign that anything is wrong. A person
+looking at the folder cannot tell which is real, and neither can you.
+
+Backups are already handled and are not your job:
+
+- **Drive keeps its own version history** on every file. A bad write is
+  recoverable from Drive's own UI, with timestamps and authors.
+- **Deleting a document trashes rather than erases**, so it is recoverable from
+  Drive's trash for weeks.
+- **`state/audit.json` is the trail.** Everything that happened is recorded
+  there, in one file, which is why there is no need to leave the evidence lying
+  around as copies of other files.
+
+A copy you made adds nothing any of those do not already do, and it costs the
+one property the folder must have: one file per collection, so that everything
+reading it agrees on what the current state is.
+
+### Writing a collection: update, never create a second
+
+Every write is an **update of the existing file**, in place, keeping its id:
+
+1. Find the file by name in `state/`.
+2. If it exists, **overwrite that file's content**. Do not create a new one.
+3. Only when it does not exist at all do you create it.
+
+If you ever find **two files with the same name** in `state/`, that fork has
+already happened. Do not guess: read both, keep the one with more rows or the
+later modification time, say what you did and why, and remove the other. Never
+leave two behind.
+
 ## Reading the register
 
 Every collection is a JSON array in `state/`, except `settings.json` which is an

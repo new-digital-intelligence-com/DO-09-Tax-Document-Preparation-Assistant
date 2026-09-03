@@ -301,18 +301,46 @@ export async function listRootFolders(): Promise<DriveFile[]> {
   return body.files ?? [];
 }
 
+/**
+ * One file by name, and the newest one when a folder somehow holds several.
+ *
+ * Drive permits two files with the same name in the same folder and reports no
+ * error for it. That is a hazard here rather than a curiosity: the register is
+ * addressed entirely by filename, so a second `classifications.json` is a
+ * register that has silently forked — one writer updates one copy, another
+ * reads the other, and the figures diverge with nothing anywhere saying so.
+ *
+ * Asking for one result and taking it would make which copy wins arbitrary and
+ * unstable between calls. Asking for several and taking the newest is at least
+ * deterministic, so every reader and writer in this process agrees on the same
+ * file, and a fork degrades to "the older copy is ignored" rather than to
+ * "reads and writes land on different files at random".
+ */
 export async function findInFolder(folderId: string, name: string): Promise<DriveFile | undefined> {
   const escaped = name.replace(/'/g, "\\'");
   const params = new URLSearchParams({
     q: `'${folderId}' in parents and name = '${escaped}' and trashed = false`,
     fields: "files(id, name, mimeType, size, modifiedTime, md5Checksum)",
-    pageSize: "1",
+    orderBy: "modifiedTime desc",
+    pageSize: "10",
     supportsAllDrives: "true",
     includeItemsFromAllDrives: "true",
   });
   const response = await call(`/files?${params.toString()}`);
   const body = (await response.json()) as { files?: DriveFile[] };
-  return body.files?.[0];
+  const files = body.files ?? [];
+
+  if (files.length > 1) {
+    // Loud, because it means something wrote a second copy rather than
+    // updating the first, and whoever has to explain a wrong figure later will
+    // want to know when the fork started.
+    console.warn(
+      `[drive] ${files.length} files named ${name} in folder ${folderId}. ` +
+        `Using the most recently modified (${files[0].id}); the others are being ignored, ` +
+        `not merged. The register is addressed by name and should hold one of each.`,
+    );
+  }
+  return files[0];
 }
 
 /**
