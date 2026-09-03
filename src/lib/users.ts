@@ -6,7 +6,7 @@ import path from "node:path";
  * Who the workspace is being prepared for.
  *
  * Everything in this app is scoped to one user: their documents, their
- * extractions, their reconciliation, their drafts, and their own `input` and
+ * extractions, their flags, their drafts, and their own `input` and
  * `output` folders on Drive. There is no sign-in — this is a local tool with a
  * picker, not an authenticated product — so "the current user" is a deliberate
  * choice somebody made on the front screen, not an identity anybody proved.

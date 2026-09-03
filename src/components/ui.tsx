@@ -258,9 +258,6 @@ const STATE_TONE: Record<string, Tone> = {
   asset: "warn",
   "non-deductible": "neutral",
 
-  // Reconciliation
-  "document-only": "warn",
-  "ledger-only": "crit",
 
   // Period and package
   draft: "warn",

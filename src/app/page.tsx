@@ -32,7 +32,6 @@ const PIPELINE: Stage[] = [
   { id: "documents", label: "Collect", icon: "upload", blurb: "Drives and inboxes into one workspace" },
   { id: "documents", label: "Extract", icon: "receipt", blurb: "Vendor, dates and figures off each page" },
   { id: "categories", label: "Categorise", icon: "categories", blurb: "Against the firm's tax chart" },
-  { id: "reconciliation", label: "Reconcile", icon: "reconciliation", blurb: "Documents against the ledger" },
   { id: "exceptions", label: "Flag", icon: "flag", blurb: "Every difference, with its reason" },
   { id: "forms", label: "Draft", icon: "forms", blurb: "Schedule C, 1099-NEC, 1040-ES" },
   { id: "package", label: "Package", icon: "package", blurb: "Handed to a person to review" },

@@ -299,31 +299,22 @@ export function DocumentsPanel() {
         onClose={() => setOpenId(null)}
         actions={
           open && (
-            <>
-              {/* The document on Drive, when the sweep collected it from there.
-                  A reviewer who wants to send somebody the source needs the
-                  shared link, not a localhost URL that works on one machine. */}
-              {open.doc.source === "drive" && open.doc.sourceRef && (
-                <a
-                  href={`https://drive.google.com/file/d/${open.doc.sourceRef}/view`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
-                >
-                  <Icon name="drive" className="size-3.5" />
-                  Drive
-                </a>
-              )}
-              <a
-                href={`/api/documents/${open.doc.id}/file`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
-              >
-                <Icon name="external" className="size-3.5" />
-                Open
-              </a>
-            </>
+            /* One Open, not two. It prefers the Drive link where there is one,
+               because that is the copy a reviewer can send to somebody else; a
+               localhost URL only works on this machine. */
+            <a
+              href={
+                open.doc.sourceRef
+                  ? `https://drive.google.com/file/d/${open.doc.sourceRef}/view`
+                  : `/api/documents/${open.doc.id}/file`
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
+            >
+              <Icon name="external" className="size-3.5" />
+              Open
+            </a>
           )
         }
       >

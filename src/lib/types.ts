@@ -118,7 +118,7 @@ export type SourceDocument = {
    *
    * Byte-identical duplicates are found here and nowhere else. The *other*
    * kind of duplicate — the same invoice saved twice with different bytes —
-   * is a reconciliation finding, not a hash match, and the two must not be
+   * is a content finding, not a hash match, and the two must not be
    * conflated in the exception text.
    */
   sha256: string;
@@ -262,66 +262,12 @@ export function effectiveCategoryId(c: Classification): string {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Ledger and reconciliation
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * One line from the accounting system.
- *
- * This app never writes to it. The accounting bridge is out of scope for this
- * build; the ledger arrives as a CSV and is treated as read-only fact.
- */
-export type LedgerEntry = {
-  id: string;
-  periodId: string;
-  /** ISO `YYYY-MM-DD`. */
-  date: string;
-  description: string;
-  counterparty: string;
-  /** Positive is money out for an expense account, money in for an income one. */
-  amount: number;
-  currency: string;
-  /** Chart-of-accounts label as the accounting system spells it. */
-  account: string;
-  /** The system's own reference — invoice number, transaction id. */
-  ref?: string;
-  source: "csv" | "accounting-bridge";
-  importedAt: string;
-};
-
-export type MatchKind =
-  /** A document and a ledger entry that agree. */
-  | "matched"
-  /** A document nothing in the ledger accounts for. */
-  | "document-only"
-  /** A ledger entry with no supporting document. */
-  | "ledger-only";
-
-export type Match = {
-  id: string;
-  periodId: string;
-  kind: MatchKind;
-  docId?: string;
-  ledgerEntryId?: string;
-  /** 0–1 confidence in the pairing. */
-  score: number;
-  /** What made it match, or what stopped it. Shown in the reconciliation table. */
-  reasons: string[];
-  /** Set when the amounts pair up but disagree. Never rounded away. */
-  amountDelta?: number;
-  matchedAt: string;
-};
-
-/* ────────────────────────────────────────────────────────────────────────────
  * Exceptions — the flag list
  * ────────────────────────────────────────────────────────────────────────── */
 
 export type ExceptionKind =
   | "duplicate-document"
   | "total-mismatch"
-  | "ledger-amount-mismatch"
-  | "missing-support"
-  | "unmatched-document"
   | "unreadable-document"
   | "missing-period"
   | "out-of-period"
@@ -354,7 +300,6 @@ export type TaxException = {
   /** What would close it, addressed to the reviewer. */
   suggestedAction: string;
   docIds: string[];
-  ledgerEntryIds: string[];
   /** The money at stake, where there is a single figure. */
   amount?: number;
   currency?: string;
@@ -441,10 +386,6 @@ export type ReviewPackage = {
     unreadable: number;
     classified: number;
     needsReview: number;
-    ledgerEntries: number;
-    matched: number;
-    documentOnly: number;
-    ledgerOnly: number;
     openExceptions: number;
   };
   categoryTotals: {
@@ -528,7 +469,6 @@ export type DocumentView = {
   doc: SourceDocument;
   extraction?: Extraction;
   classification?: Classification;
-  match?: Match;
   exceptions: TaxException[];
 };
 
@@ -544,10 +484,6 @@ export type PrepStatus = {
     classified: number;
     pendingClassification: number;
     needsReview: number;
-    ledgerEntries: number;
-    matched: number;
-    documentOnly: number;
-    ledgerOnly: number;
   };
   exceptions: { open: number; high: number; medium: number; low: number };
   money: {

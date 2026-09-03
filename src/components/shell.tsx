@@ -42,14 +42,6 @@ export const SECTIONS: Section[] = [
   },
   { id: "categories", label: "Categories", icon: "categories", blurb: "Totals by tax category" },
   {
-    id: "reconciliation",
-    label: "Reconciliation",
-    icon: "reconciliation",
-    blurb: "Documents against the ledger",
-    countKey: "unmatched",
-    alerting: true,
-  },
-  {
     id: "exceptions",
     label: "Exceptions",
     icon: "exceptions",

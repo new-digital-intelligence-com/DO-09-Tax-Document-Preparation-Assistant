@@ -4,8 +4,6 @@ import { categoryName, deductibleFraction, getCategory } from "./categories";
 import { listClassifications } from "./classify";
 import { listDocuments } from "./documents";
 import { listExtractions } from "./extract";
-import { listLedger } from "./ledger";
-import { daysBetween, listMatches } from "./reconcile";
 import { getPeriod, getSettings, inPeriod, maskTaxId, money } from "./settings";
 import { mutate, newId, readStore } from "./store";
 import { effectiveCategoryId } from "./types";
@@ -15,8 +13,6 @@ import type {
   ExceptionSeverity,
   Extraction,
   FilingPeriod,
-  LedgerEntry,
-  Match,
   Settings,
   SourceDocument,
   TaxException,
@@ -31,7 +27,7 @@ import type {
  * looks finished. Three properties matter more than the rules themselves.
  *
  * **Detection is idempotent.** `detect` recomputes the whole finding set and
- * matches it against what is already on file by `kind` + documents + ledger
+ * matches it against what is already on file by `kind` + documents
  * entries. A finding that is still true keeps its id, its status, and — the
  * important one — the note whoever closed it wrote. A re-run that reopened
  * everything a reviewer had worked through would make re-running detection
@@ -47,7 +43,7 @@ import type {
  * detail that says which two numbers disagree and by how much can be settled in
  * the time it takes to read it.
  *
- * Nothing here edits a `LedgerEntry`, an `Extraction` or a `Classification`.
+ * Nothing here edits an `Extraction` or a `Classification`.
  * Flag, never fix.
  */
 
@@ -69,9 +65,6 @@ import type {
 const SEVERITY: Record<ExceptionKind, ExceptionSeverity> = {
   "duplicate-document": "high",
   "total-mismatch": "high",
-  "ledger-amount-mismatch": "high",
-  "missing-support": "high",
-  "unmatched-document": "medium",
   "unreadable-document": "high",
   "missing-period": "medium",
   "out-of-period": "medium",
@@ -189,7 +182,6 @@ type Finding = {
   detail: string;
   suggestedAction: string;
   docIds: string[];
-  ledgerEntryIds: string[];
   amount?: number;
   currency?: string;
 };
@@ -204,14 +196,8 @@ type Raise = (finding: Finding) => void;
  * cent. The identity of a finding is what it is about: its kind and the records
  * it points at.
  */
-function keyOf(finding: {
-  kind: ExceptionKind;
-  docIds: string[];
-  ledgerEntryIds: string[];
-}): string {
-  const docs = [...finding.docIds].sort().join(",");
-  const entries = [...finding.ledgerEntryIds].sort().join(",");
-  return `${finding.kind}|${docs}|${entries}`;
+function keyOf(finding: { kind: ExceptionKind; docIds: string[] }): string {
+  return `${finding.kind}|${[...finding.docIds].sort().join(",")}`;
 }
 
 type Ctx = {
@@ -223,9 +209,6 @@ type Ctx = {
   allDocs: SourceDocument[];
   extractionByDoc: Map<string, Extraction>;
   classificationByDoc: Map<string, Classification>;
-  entries: LedgerEntry[];
-  entryById: Map<string, LedgerEntry>;
-  matches: Match[];
 };
 
 function currencyOf(ctx: Ctx, extraction?: Extraction): string {
@@ -293,7 +276,6 @@ function duplicateDocuments(ctx: Ctx, raise: Raise): void {
         `this with a note recording why more than one belongs here. Until then the amount is ` +
         `counted once per copy in every category total and on every form line it feeds.`,
       docIds: group.map((doc) => doc.id),
-      ledgerEntryIds: [],
       amount: totals[0],
       currency: totals.length > 0 ? currency : undefined,
     });
@@ -329,7 +311,6 @@ function duplicateDocuments(ctx: Ctx, raise: Raise): void {
         `are genuinely two invoices that happen to share a number, resolve this with a note saying ` +
         `so — otherwise ${money(first?.total ?? 0, currency)} lands on the return twice.`,
       docIds: group.map((doc) => doc.id),
-      ledgerEntryIds: [],
       amount: first?.total,
       currency,
     });
@@ -362,103 +343,8 @@ function totalMismatch(ctx: Ctx, raise: Raise): void {
         `re-run extraction for this document; if the document itself is inconsistent, ask ` +
         `${extraction.vendor ?? "the vendor"} for a corrected copy before the package goes out.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: delta,
       currency,
-    });
-  }
-}
-
-/** The document and the ledger agree on what happened but not on how much. */
-function ledgerAmountMismatch(ctx: Ctx, raise: Raise): void {
-  for (const match of ctx.matches) {
-    if (match.kind !== "matched") continue;
-    if (match.amountDelta === undefined || Math.abs(match.amountDelta) < 0.01) continue;
-    const doc = ctx.docs.find((current) => current.id === match.docId);
-    const entry = match.ledgerEntryId ? ctx.entryById.get(match.ledgerEntryId) : undefined;
-    if (!doc || !entry) continue;
-
-    const extraction = ctx.extractionByDoc.get(doc.id);
-    const currency = currencyOf(ctx, extraction);
-    const docTotal = Math.abs(extraction?.total ?? 0);
-    const delta = round(Math.abs(match.amountDelta));
-
-    raise({
-      kind: "ledger-amount-mismatch",
-      title: `${money(delta, currency)} between ${extraction?.vendor ?? doc.filename} and the ledger`,
-      detail:
-        `${label(doc)} totals ${money(docTotal, currency)}, but ledger entry ${entry.id} — ` +
-        `${entry.counterparty || "no counterparty"}, ${entry.date}` +
-        `${entry.account ? `, account ${entry.account}` : ""}${entry.ref ? `, ref ${entry.ref}` : ""} — ` +
-        `records ${money(Math.abs(entry.amount), entry.currency)}. The difference is ` +
-        `${money(delta, currency)}. They were paired at ${match.score}: ${match.reasons[0] ?? "no reason recorded"}`,
-      suggestedAction:
-        `Establish which figure is right — a part payment, a discount taken, a fee netted off, or ` +
-        `a keying error — and correct it in the accounting system. Nothing in this app writes to ` +
-        `the ledger, and the draft carries the document's ${money(docTotal, currency)} until the ` +
-        `two agree.`,
-      docIds: [doc.id],
-      ledgerEntryIds: [entry.id],
-      amount: delta,
-      currency,
-    });
-  }
-}
-
-/** Money left the account and no paper says why. */
-function missingSupport(ctx: Ctx, raise: Raise): void {
-  for (const match of ctx.matches) {
-    if (match.kind !== "ledger-only") continue;
-    const entry = match.ledgerEntryId ? ctx.entryById.get(match.ledgerEntryId) : undefined;
-    if (!entry) continue;
-
-    raise({
-      kind: "missing-support",
-      title: `No document for ${money(Math.abs(entry.amount), entry.currency)} to ${entry.counterparty || "an unnamed counterparty"}`,
-      detail:
-        `Ledger entry ${entry.id} records ${money(entry.amount, entry.currency)} on ${entry.date} to ` +
-        `${entry.counterparty || "no counterparty"}` +
-        `${entry.account ? ` against ${entry.account}` : ""}${entry.ref ? `, ref ${entry.ref}` : ""}` +
-        `${entry.description ? ` ("${entry.description}")` : ""}, and no document in ` +
-        `${ctx.period.label} accounts for it. ${match.reasons[1] ?? ""}`.trim(),
-      suggestedAction:
-        `Ask ${entry.counterparty || "the counterparty"} for the invoice or receipt and upload it, ` +
-        `or resolve this with a note saying what the payment was for and where the support is ` +
-        `held. A deduction with no document behind it is the hardest kind to defend.`,
-      docIds: [],
-      ledgerEntryIds: [entry.id],
-      amount: Math.abs(entry.amount),
-      currency: entry.currency,
-    });
-  }
-}
-
-/** A document nothing in the ledger accounts for. */
-function unmatchedDocument(ctx: Ctx, raise: Raise): void {
-  for (const match of ctx.matches) {
-    if (match.kind !== "document-only") continue;
-    const doc = ctx.docs.find((current) => current.id === match.docId);
-    if (!doc) continue;
-    const extraction = ctx.extractionByDoc.get(doc.id);
-    const currency = currencyOf(ctx, extraction);
-
-    raise({
-      kind: "unmatched-document",
-      title: `Nothing in the ledger pairs with ${extraction?.vendor ?? doc.filename}`,
-      detail:
-        `${label(doc)}` +
-        `${typeof extraction?.total === "number" ? ` totals ${money(extraction.total, currency)}` : " carries no total"}` +
-        `${extraction?.issueDate ? ` and is dated ${extraction.issueDate}` : ""}, and none of the ` +
-        `${ctx.entries.length} ledger row(s) in ${ctx.period.label} pairs with it. ` +
-        `${match.reasons[1] ?? ""}`.trim(),
-      suggestedAction:
-        `Check whether the payment cleared in another period, on a personal card, or under a ` +
-        `different counterparty name — or whether this is a quote, a statement or a pro-forma ` +
-        `rather than a paid invoice. If the ledger is right, resolve this with a note saying which.`,
-      docIds: [doc.id],
-      ledgerEntryIds: [],
-      amount: extraction?.total,
-      currency: typeof extraction?.total === "number" ? currency : undefined,
     });
   }
 }
@@ -484,7 +370,6 @@ function unreadableDocument(ctx: Ctx, raise: Raise): void {
         `from the paper original. If the document is not needed for ${ctx.period.label}, delete it ` +
         `with a reason so the corpus does not carry a page nobody can read.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
     });
   }
 }
@@ -536,35 +421,20 @@ function missingPeriodDocuments(ctx: Ctx, raise: Raise): void {
       )
       .join(", ");
 
-    // A ledger row from the same counterparty in the missing month is the
-    // strongest possible evidence the invoice exists and was simply not
-    // collected, so name it rather than leaving the reviewer to look.
-    const key = vendorKey(vendor);
-    const evidence = ctx.entries.filter((entry) => {
-      const other = vendorKey(entry.counterparty);
-      if (!other || !key) return false;
-      const related = other.includes(key) || key.includes(other);
-      return related && missing.includes(monthKey(entry.date));
-    });
-
     raise({
       kind: "missing-period",
       title: `No ${missing.map(monthLabel).join(" or ")} document from ${vendor}`,
       detail:
         `${vendor} bills monthly — ${group.length} document(s) in ${ctx.period.label}: ${seen} — but ` +
-        `nothing is on file for ${missing.map(monthLabel).join(" or ")}. ` +
-        (evidence.length > 0
-          ? `The ledger shows ${evidence
-              .map((entry) => `${money(entry.amount, entry.currency)} on ${entry.date} (${entry.id})`)
-              .join(", ")} to this counterparty in that gap, so the invoice exists and was not collected.`
-          : `The ledger shows no payment to them in that gap either.`),
+        `nothing is on file for ${missing.map(monthLabel).join(" or ")}. A vendor who billed ` +
+        `either side of a gap almost certainly billed inside it too, so the likeliest reading is ` +
+        `that the invoice exists and was never collected.`,
       suggestedAction:
         `Search the mailbox and the Drive folder for ${vendor}'s ` +
         `${missing.map(monthLabel).join(" and ")} invoice and upload it, or resolve this with a ` +
         `note recording that the month was not billed. A missing month is a deduction nobody is ` +
         `claiming.`,
       docIds: group.map((row) => row.doc.id),
-      ledgerEntryIds: evidence.map((entry) => entry.id),
     });
   }
 }
@@ -604,7 +474,6 @@ function outOfPeriod(ctx: Ctx, raise: Raise): void {
             `${ctx.period.label}, resolve this with a note giving the dates; if not, move the ` +
             `document to the period that earned it.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction.total,
       currency: typeof extraction.total === "number" ? currency : undefined,
     });
@@ -634,7 +503,6 @@ function currencyMismatch(ctx: Ctx, raise: Raise): void {
         `the note, and have the tax manager confirm it before the package is handed off. Do not ` +
         `edit the document's own figures.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction.total,
       currency: declared,
     });
@@ -674,7 +542,6 @@ function lowConfidenceCategory(ctx: Ctx, raise: Raise): void {
         `${typeof extraction?.total === "number" ? `${money(extraction.total, currency)} sits on ` : "The amount sits on "}` +
         `${category?.formLine ?? "a form line"} until someone does.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction?.total,
       currency: typeof extraction?.total === "number" ? currency : undefined,
     });
@@ -726,7 +593,6 @@ function categoryNeedsJudgement(ctx: Ctx, raise: Raise): void {
         `Make that call and record it in the note — the figure the reviewer decides on, and why. ` +
         `This app does not give tax advice and will not decide it for you.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: total,
       currency: typeof total === "number" ? currency : undefined,
     });
@@ -756,7 +622,6 @@ function missingVendorTaxId(ctx: Ctx, raise: Raise): void {
         `accountant. Resolve this with a note when it is on file, or note that they are a ` +
         `corporation and no 1099 is due.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction.total,
       currency: typeof extraction.total === "number" ? currency : undefined,
     });
@@ -787,7 +652,6 @@ function possiblePersonalExpense(ctx: Ctx, raise: Raise): void {
         `saying what it was for; if it was not, accept this exception so the amount stays off the ` +
         `return with the reason on the record.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction?.total,
       currency: typeof extraction?.total === "number" ? currency : undefined,
     });
@@ -823,7 +687,6 @@ function capitalisationThreshold(ctx: Ctx, raise: Raise): void {
         `de minimis safe harbour, or elect section 179 — then record the decision and the figure ` +
         `in the note. The choice changes this year's deduction and the next several years' as well.`,
       docIds: [doc.id],
-      ledgerEntryIds: [],
       amount: extraction.total,
       currency,
     });
@@ -879,7 +742,6 @@ function contractor1099Threshold(ctx: Ctx, raise: Raise): void {
         `${taxId ? "" : ", starting with a request for the W-9"}. This app produces a summary of ` +
         `who crosses the threshold; it does not prepare or file a 1099.`,
       docIds: group.map((row) => row.doc.id),
-      ledgerEntryIds: [],
       amount: total,
       currency,
     });
@@ -896,53 +758,40 @@ function contractor1099Threshold(ctx: Ctx, raise: Raise): void {
  * says nothing about why, and escalates.
  */
 function backdatedDocument(ctx: Ctx, raise: Raise): void {
-  for (const match of ctx.matches) {
-    if (match.kind !== "matched") continue;
-    const doc = ctx.docs.find((current) => current.id === match.docId);
-    const entry = match.ledgerEntryId ? ctx.entryById.get(match.ledgerEntryId) : undefined;
-    if (!doc || !entry) continue;
-
+  for (const doc of ctx.docs) {
     const extraction = ctx.extractionByDoc.get(doc.id);
     const issueDate = extraction?.issueDate;
-    if (!isDate(issueDate) || !isDate(entry.date)) continue;
+    if (!isDate(issueDate)) continue;
 
-    const afterPayment = issueDate! > entry.date;
-    const afterPeriodEnd = issueDate! > ctx.period.end && inPeriod(entry.date, ctx.period);
-    if (!afterPayment && !afterPeriodEnd) continue;
+    // Without an accounting export there is nothing to compare a document's
+    // date against except the period itself. A document dated after the period
+    // closed, sitting in the period's folder, is the case worth escalating: it
+    // was either filed into the wrong quarter or written after the fact.
+    if (issueDate! <= ctx.period.end) continue;
 
-    const gap = daysBetween(entry.date, issueDate) ?? 0;
     const currency = currencyOf(ctx, extraction);
+    const total = extraction?.total;
 
     raise({
       kind: "backdated-document",
-      title: `${extraction?.vendor ?? doc.filename} is dated after the payment it supports`,
+      title: `${extraction?.vendor ?? doc.filename} is dated after the period closed`,
       detail:
-        `${label(doc)} is dated ${issueDate}, ${gap} day(s) after ledger entry ${entry.id} ` +
-        `(${entry.counterparty || "no counterparty"}, ${money(entry.amount, entry.currency)} on ` +
-        `${entry.date}) that it was matched to at ${match.score}. ` +
-        (afterPeriodEnd
-          ? `The document also falls after the ${ctx.period.label} end of ${ctx.period.end} while ` +
-            `the payment sits inside the period. `
-          : "") +
-        `A document written after the money moved may be a reissue, and it may be a document ` +
-        `produced to fit the payment. Nothing in the file says which, and this app does not guess.`,
+        `${label(doc)} is dated ${issueDate}, after the ${ctx.period.label} end of ` +
+        `${ctx.period.end}` +
+        (typeof total === "number" ? `, and totals ${money(total, currency)}` : "") +
+        `. It was collected into this period's workspace even so. A document written after the ` +
+        `period closed may have been filed into the wrong quarter, and it may have been produced ` +
+        `after the fact. Nothing in the file says which, and this app does not guess.`,
       suggestedAction:
-        `Escalate to the tax manager immediately, before this document goes into any package. ` +
-        `Ask ${extraction?.vendor ?? "the counterparty"} when the invoice was actually issued and ` +
-        `keep their answer with the note. Do not resolve this one on the strength of the dates ` +
-        `alone.`,
+        `Escalate to the tax manager before this document goes into any package. Ask ` +
+        `${extraction?.vendor ?? "the counterparty"} when it was issued and what it covers. If it ` +
+        `belongs to the next period, move it there rather than resolving it here.`,
       docIds: [doc.id],
-      ledgerEntryIds: [entry.id],
-      amount: Math.abs(extraction?.total ?? entry.amount),
+      amount: typeof total === "number" ? total : undefined,
       currency,
     });
   }
 }
-
-/* ────────────────────────────────────────────────────────────────────────────
- * Public surface
- * ────────────────────────────────────────────────────────────────────────── */
-
 /** Worst first, and open before closed — the order a reviewer works in. */
 const SEVERITY_RANK: Record<ExceptionSeverity, number> = { high: 0, medium: 1, low: 2 };
 
@@ -974,8 +823,8 @@ export async function listExceptions(filter?: {
  * Recompute the period's findings.
  *
  * Safe to run as often as anyone likes, which is the point: it runs after an
- * extraction, after a categorisation, after a ledger import, after a
- * reconciliation, and each time it has to leave a reviewer's work where they
+ * extraction and after a categorisation, and each time it has to leave a
+ * reviewer's work where they
  * left it. What survives a re-run is the id, the status, and the note. What is
  * refreshed is the wording, the figures and the severity — those are derived
  * from records that change, and a detail quoting last week's total is a detail
@@ -998,13 +847,11 @@ export async function detect(
     );
   }
 
-  const [settings, allDocs, extractions, classifications, entries, matches] = await Promise.all([
+  const [settings, allDocs, extractions, classifications] = await Promise.all([
     getSettings(),
     listDocuments(),
     listExtractions(periodId),
     listClassifications(periodId),
-    listLedger(periodId),
-    listMatches(periodId),
   ]);
 
   const ctx: Ctx = {
@@ -1014,9 +861,6 @@ export async function detect(
     allDocs,
     extractionByDoc: new Map(extractions.map((row) => [row.docId, row])),
     classificationByDoc: new Map(classifications.map((row) => [row.docId, row])),
-    entries,
-    entryById: new Map(entries.map((entry) => [entry.id, entry])),
-    matches,
   };
 
   const findings: Finding[] = [];
@@ -1035,10 +879,7 @@ export async function detect(
   unreadableDocument(ctx, raise);
   totalMismatch(ctx, raise);
   currencyMismatch(ctx, raise);
-  ledgerAmountMismatch(ctx, raise);
   backdatedDocument(ctx, raise);
-  missingSupport(ctx, raise);
-  unmatchedDocument(ctx, raise);
   outOfPeriod(ctx, raise);
   missingPeriodDocuments(ctx, raise);
   lowConfidenceCategory(ctx, raise);
@@ -1085,7 +926,6 @@ export async function detect(
           detail: finding.detail,
           suggestedAction: finding.suggestedAction,
           docIds: finding.docIds,
-          ledgerEntryIds: finding.ledgerEntryIds,
           amount: finding.amount,
           currency: finding.currency,
           // status, raisedAt, raisedBy, resolvedAt, resolvedBy and
@@ -1105,7 +945,6 @@ export async function detect(
         detail: finding.detail,
         suggestedAction: finding.suggestedAction,
         docIds: finding.docIds,
-        ledgerEntryIds: finding.ledgerEntryIds,
         amount: finding.amount,
         currency: finding.currency,
         status: "open",
@@ -1133,8 +972,7 @@ export async function detect(
     subject: periodId,
     result: "ok",
     detail:
-      `Detection over ${ctx.docs.length} document(s), ${entries.length} ledger row(s) and ` +
-      `${matches.length} match(es): ${outcome.raised} raised, ${outcome.carriedForward} carried ` +
+      `Detection over ${ctx.docs.length} document(s): ${outcome.raised} raised, ${outcome.carriedForward} carried ` +
       `forward with their status and notes intact, ${outcome.dropped.length} retired. ` +
       `${outcome.kept.filter((exception) => exception.status === "open").length} open. ` +
       `Kinds present: ${ALL_KINDS.filter((kind) => byKind[kind] > 0)
@@ -1160,8 +998,7 @@ export async function detect(
       detail:
         `Retired ${exception.kind} "${exception.title}" (raised ${exception.raisedAt} by ` +
         `${exception.raisedBy}, status ${exception.status}) — the records behind it no longer ` +
-        `meet the rule. Documents: ${exception.docIds.join(", ") || "none"}. Ledger: ` +
-        `${exception.ledgerEntryIds.join(", ") || "none"}.` +
+        `meet the rule. Documents: ${exception.docIds.join(", ") || "none"}.` +
         (exception.resolutionNote
           ? ` Closed by ${exception.resolvedBy ?? "someone"} with the note: "${exception.resolutionNote}"`
           : ""),
@@ -1259,8 +1096,7 @@ export async function resolveException(input: {
       `${input.accept ? "Accepted" : "Resolved"} ${outcome.prior.severity} ` +
       `${outcome.prior.kind} "${outcome.prior.title}"` +
       (outcome.prior.status !== "open" ? ` (it was already ${outcome.prior.status})` : "") +
-      `. Documents: ${outcome.prior.docIds.join(", ") || "none"}. Ledger: ` +
-      `${outcome.prior.ledgerEntryIds.join(", ") || "none"}. Note: ${note}`,
+      `. Documents: ${outcome.prior.docIds.join(", ") || "none"}. Note: ${note}`,
     periodId: outcome.updated.periodId,
     exceptionId: outcome.updated.id,
     docId: outcome.updated.docIds[0],

@@ -2,7 +2,13 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { record } from "./audit";
 import { classifyDocument, getClassification } from "./classify";
-import { getDocument, ingest, listDocuments, readDocumentBytes } from "./documents";
+import {
+  getDocument,
+  ingest,
+  listDocuments,
+  readDocumentBytes,
+  removeLocalFile,
+} from "./documents";
 import {
   downloadFile,
   driveStatus,
@@ -33,7 +39,7 @@ import type { Classification, Extraction, SourceDocument } from "./types";
  * that was edited is a different document even though its name did not change.
  *
  * What this deliberately does NOT cache is anything downstream of one document.
- * Reconciliation, the exception list and the draft forms are computed over the
+ * The exception list and the draft forms are computed over the
  * whole period and are cheap; caching them would mean a stale finding surviving
  * a change to the document it was raised against.
  */
@@ -453,6 +459,184 @@ export async function pushDocumentToDrive(docId: string): Promise<{ stored: bool
   });
 
   return { stored: true, detail: "Added to the Drive input folder." };
+}
+
+/**
+ * Push what this workspace already holds up to Drive.
+ *
+ * The backfill case, and it matters more than it sounds. A corpus collected and
+ * read before Drive was connected exists only on this machine: the documents
+ * are in the local register and their answers are in local JSON, and a Claude
+ * session looking at the shared folder would see an empty workspace and
+ * conclude the period had not been started.
+ *
+ * Nothing is re-read. Every document already has an extraction and most have a
+ * categorisation, so this uploads the files and writes the answers that are
+ * already on record. Paying for forty model calls to produce results that are
+ * sitting on disk would be absurd, and worse, the second answers could differ
+ * in wording from the ones the drafts were built from.
+ */
+export async function publishToDrive(actor = preparer()): Promise<{
+  documents: number;
+  filesUploaded: number;
+  resultsWritten: number;
+  skipped: { filename: string; reason: string }[];
+}> {
+  const status = driveStatus();
+  if (status.state !== "ready") throw new Error(status.detail);
+
+  const period = await activePeriod();
+  const docs = await listDocuments({ periodId: period.id });
+  const skipped: { filename: string; reason: string }[] = [];
+  let filesUploaded = 0;
+  let resultsWritten = 0;
+
+  for (const doc of docs) {
+    const extraction = await getExtraction(doc.id);
+
+    // A document nobody has read yet is uploaded so the folder holds the
+    // corpus, but no result is written for it — an empty result file would be
+    // read back on the next run as "already processed, nothing found".
+    try {
+      const pushed = await pushDocumentToDrive(doc.id);
+      if (pushed.stored) filesUploaded++;
+      else skipped.push({ filename: doc.filename, reason: pushed.detail });
+    } catch (error) {
+      skipped.push({
+        filename: doc.filename,
+        reason: error instanceof Error ? error.message : "upload failed",
+      });
+      continue;
+    }
+
+    if (!extraction) continue;
+
+    try {
+      await writeCachedResult({
+        version: RESULT_VERSION,
+        sha256: doc.sha256,
+        filename: doc.filename,
+        source: doc.source,
+        sourceDetail: doc.sourceDetail,
+        processedAt: extraction.extractedAt,
+        processedBy: actor,
+        modelId: extraction.modelId,
+        extraction,
+        classification: await getClassification(doc.id),
+      });
+      resultsWritten++;
+    } catch (error) {
+      skipped.push({
+        filename: doc.filename,
+        reason: `result not written: ${error instanceof Error ? error.message : "unknown error"}`,
+      });
+    }
+  }
+
+  await record({
+    actor,
+    action: "drive.publish",
+    subject: period.id,
+    result: "ok",
+    detail:
+      `Published the local workspace to Drive: ${filesUploaded} document(s) uploaded and ` +
+      `${resultsWritten} stored result(s) written, out of ${docs.length} on the register.` +
+      (skipped.length ? ` ${skipped.length} skipped.` : ""),
+    periodId: period.id,
+  });
+
+  return { documents: docs.length, filesUploaded, resultsWritten, skipped };
+}
+
+/**
+ * Drop the local copy of anything Drive already holds.
+ *
+ * Drive is the source. Keeping a second copy of every PDF on this machine makes
+ * the workspace twice as large for no benefit, and worse, it makes it ambiguous
+ * which copy is authoritative when they differ — a file replaced on Drive would
+ * still preview from the stale local one and nothing would say so.
+ *
+ * The check before each delete is what makes this safe: the file is downloaded
+ * from Drive and its hash compared against the register row, and only an exact
+ * match is removed. A document Drive does not have, or has under different
+ * bytes, keeps its local copy. Deleting the only copy of somebody's receipt to
+ * save a few kilobytes is not a trade worth making.
+ *
+ * `/api/documents/[id]/file` already falls back to Drive, so the viewer keeps
+ * working with nothing stored here at all.
+ */
+export async function pruneLocalDocuments(actor = preparer()): Promise<{
+  checked: number;
+  removed: number;
+  bytesFreed: number;
+  kept: { filename: string; reason: string }[];
+}> {
+  const status = driveStatus();
+  if (status.state !== "ready") throw new Error(status.detail);
+
+  const period = await activePeriod();
+  const folders = await workspace();
+  const docs = await listDocuments({ periodId: period.id });
+
+  const onDrive = new Map(
+    (await listFolder(folders.inputId)).map((file) => [file.name, file]),
+  );
+
+  const kept: { filename: string; reason: string }[] = [];
+  let removed = 0;
+  let bytesFreed = 0;
+
+  for (const doc of docs) {
+    // No local copy is the goal state, not a problem.
+    try {
+      await readDocumentBytes(doc.id);
+    } catch {
+      continue;
+    }
+
+    const remote = onDrive.get(doc.filename);
+    if (!remote) {
+      kept.push({ filename: doc.filename, reason: "not in the Drive input folder" });
+      continue;
+    }
+
+    try {
+      const bytes = await downloadFile(remote.id);
+      if (sha256Of(bytes) !== doc.sha256) {
+        kept.push({
+          filename: doc.filename,
+          reason: "the copy on Drive has different bytes from the one on record",
+        });
+        continue;
+      }
+    } catch (error) {
+      kept.push({
+        filename: doc.filename,
+        reason: `could not be verified on Drive: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      });
+      continue;
+    }
+
+    await removeLocalFile(doc.id);
+    removed++;
+    bytesFreed += doc.bytes;
+  }
+
+  await record({
+    actor,
+    action: "workspace.prune",
+    subject: period.id,
+    result: "ok",
+    detail:
+      `Removed ${removed} local document file(s) (${Math.round(bytesFreed / 1024)} KB) that Drive ` +
+      `holds byte-for-byte. ${kept.length} kept because they could not be verified there. The ` +
+      `register rows are untouched; the viewer reads those documents from Drive.`,
+    periodId: period.id,
+  });
+
+  return { checked: docs.length, removed, bytesFreed, kept };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

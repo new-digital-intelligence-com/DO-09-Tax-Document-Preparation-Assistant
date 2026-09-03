@@ -7,7 +7,6 @@ import { OverviewPanel } from "@/components/panels/OverviewPanel";
 import { WorkspacePanel } from "@/components/panels/WorkspacePanel";
 import { DocumentsPanel } from "@/components/panels/DocumentsPanel";
 import { CategoriesPanel } from "@/components/panels/CategoriesPanel";
-import { ReconciliationPanel } from "@/components/panels/ReconciliationPanel";
 import { ExceptionsPanel } from "@/components/panels/ExceptionsPanel";
 import { FormsPanel } from "@/components/panels/FormsPanel";
 import { PackagePanel } from "@/components/panels/PackagePanel";
@@ -33,7 +32,6 @@ const PANELS: Record<string, () => React.ReactElement> = {
   workspace: WorkspacePanel,
   documents: DocumentsPanel,
   categories: CategoriesPanel,
-  reconciliation: ReconciliationPanel,
   exceptions: ExceptionsPanel,
   forms: FormsPanel,
   package: PackagePanel,
@@ -58,10 +56,6 @@ const TITLES: Record<string, { title: string; description: string }> = {
   categories: {
     title: "Categories",
     description: "Totals by tax category, recorded against what reaches a form line.",
-  },
-  reconciliation: {
-    title: "Reconciliation",
-    description: "Documents against the ledger. Differences are reported, never adjusted.",
   },
   exceptions: {
     title: "Exceptions",
@@ -149,7 +143,6 @@ export default function PrepPage() {
     ? {
         documents: status.counts.documents,
         openExceptions: status.exceptions.open,
-        unmatched: status.counts.documentOnly + status.counts.ledgerOnly,
       }
     : {};
 

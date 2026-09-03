@@ -45,8 +45,8 @@ const ACTIONS = {
     verb: "Resolve",
     title: "Resolve this finding",
     consequence:
-      "Resolved means the underlying problem was fixed — the missing invoice arrived, the ledger " +
-      "was corrected, the duplicate was removed. It is a different statement from accepting the " +
+      "Resolved means the underlying problem was fixed — a better scan arrived, the total was " +
+      "corrected, the duplicate was removed. It is a different statement from accepting the " +
       "finding as it stands, and the next person to read the register will act on which one you chose.",
     placeholder: "What was fixed, and how you confirmed it.",
     variant: "primary" as const,
@@ -163,7 +163,7 @@ export function ExceptionsPanel() {
 
   async function draft(exception: TaxException) {
     setDrafting(exception.id);
-    const vendorRequest = exception.kind === "missing-support" || exception.kind === "missing-period";
+    const vendorRequest = exception.kind === "missing-period";
     try {
       const response = await fetch("/api/assist", {
         method: "POST",
@@ -331,31 +331,50 @@ export function ExceptionsPanel() {
                       </span>
                     )}
                     <div className="flex flex-wrap justify-end gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        busy={drafting === exception.id}
-                        onClick={() => draft(exception)}
-                      >
-                        {exception.kind === "missing-support" || exception.kind === "missing-period"
-                          ? "Draft the request"
-                          : "Draft a note"}
-                      </Button>
+                      {/* Offered once. A second draft over a first one replaces
+                          text somebody may already have edited or sent, and the
+                          button gives no hint that it would. Once there is a
+                          draft, the only thing on offer is rewriting it, and
+                          that is asked for explicitly. */}
+                      {drafts[exception.id] ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          busy={drafting === exception.id}
+                          onClick={() => draft(exception)}
+                          title="Replaces the draft below"
+                        >
+                          Rewrite
+                        </Button>
+                      ) : (
+                        exception.status === "open" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            busy={drafting === exception.id}
+                            onClick={() => draft(exception)}
+                          >
+                            {exception.kind === "missing-period" ? "Draft the request" : "Draft a note"}
+                          </Button>
+                        )
+                      )}
                       {exception.status === "open" ? (
                         <>
                           <Button
                             size="sm"
                             variant="secondary"
+                            title="Nothing was changed — you looked and it is fine as it stands"
                             onClick={() => setPending({ exception, action: "accept" })}
                           >
-                            Accept
+                            Accept as is
                           </Button>
                           <Button
                             size="sm"
                             variant="primary"
+                            title="The underlying problem was fixed"
                             onClick={() => setPending({ exception, action: "resolve" })}
                           >
-                            Resolve
+                            Fixed
                           </Button>
                         </>
                       ) : (

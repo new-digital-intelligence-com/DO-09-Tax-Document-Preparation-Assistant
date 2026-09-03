@@ -1,24 +1,22 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { modelConfigured } from "./anthropic";
-import { CATEGORIES } from "./categories";
+import { CATEGORIES, categoryName } from "./categories";
 import { categoryTotals } from "./classify";
 import { documentViews, listDocuments, sourceBreakdown } from "./documents";
 import { listExceptions } from "./exceptions";
 import { FORMS, getForm, listForms, renderFormMarkdown } from "./forms";
-import { listLedger } from "./ledger";
-import { listMatches, reconciliationSummary } from "./reconcile";
 import { listPackages } from "./packages";
 import { activePeriod, getPeriod, getSettings } from "./settings";
 import { effectiveCategoryId } from "./types";
-import type { DocumentView } from "./types";
+import type { DocumentView, ExceptionKind, TaxException } from "./types";
 
 /**
  * The app's tools, and the whole of the agent's authority.
  *
  * What is in this list matters less than what is not. There is no
  * `resolve_exception`, no `override_category`, no `file_return`, no
- * `edit_ledger`, no `assemble_package` and no `hand_off`. The agent can read
+ * no `assemble_package` and no `hand_off`. The agent can read
  * every document, every figure, every match and every flag, explain any of
  * them, and say what it would do — and that is the end of it.
  *
@@ -38,9 +36,6 @@ import type { DocumentView } from "./types";
  *   anything. There is no such tool to withhold, and there is no such code
  *   path to reach. `FormDraft.status` has one value.
  *
- *   `edit_ledger` — the accounting system is read-only fact here. Adjusting an
- *   amount so two figures agree is how a discrepancy stops being visible, and
- *   the discrepancy is the product.
  *
  *   `assemble_package` and `hand_off` — a package is what a person sends to a
  *   named reviewer under their own name. An agent that could assemble and hand
@@ -79,7 +74,7 @@ export const NATIVE_TOOLS: Anthropic.Tool[] = [
     description:
       "The collected documents for a period, each with what was read off it (vendor, " +
       "dates, totals, currency), the category it was put in, whether a person overrode " +
-      "that category, whether it matched a ledger entry, and the open items against it. " +
+      "that category, and the open items against it. " +
       "A document with no extraction has not been read yet, which is not the same as a " +
       "document with nothing on it.",
     input_schema: {
@@ -101,7 +96,7 @@ export const NATIVE_TOOLS: Anthropic.Tool[] = [
     name: "get_document",
     description:
       "One document in full: the file record, the extraction with its line items and its " +
-      "confidence, the classification with its rationale and runners-up, the ledger match " +
+      "confidence, the classification with its rationale and runners-up, " +
       "if there is one, and every exception raised against it.",
     input_schema: {
       type: "object",
@@ -170,36 +165,6 @@ export const NATIVE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "reconciliation",
-    description:
-      "Documents against ledger entries. Returns the counts and three lists: pairs that " +
-      "matched (with the amount difference where the two disagree), documents with no " +
-      "ledger entry, and ledger entries with no supporting document. A ledger entry with " +
-      "no document is a deduction claimed with nothing behind it.",
-    input_schema: {
-      type: "object",
-      properties: {
-        periodId: { type: "string", description: "Defaults to the active period." },
-        limit: { type: "number", description: "Rows per list. Default 40." },
-      },
-    },
-  },
-  {
-    name: "list_ledger",
-    description:
-      "The accounting lines imported for a period: date, description, counterparty, " +
-      "amount, account and reference. This app never writes to the ledger; it is read-only " +
-      "fact here.",
-    input_schema: {
-      type: "object",
-      properties: {
-        periodId: { type: "string", description: "Defaults to the active period." },
-        query: { type: "string", description: "Substring on description, counterparty or ref." },
-        limit: { type: "number", description: "Default 60." },
-      },
-    },
-  },
-  {
     name: "get_form_draft",
     description:
       "A draft form as it stands, with every line, both the recorded and the on-the-line " +
@@ -234,7 +199,7 @@ export function isNativeTool(name: string): boolean {
  */
 const HUMAN_ROUTE =
   "Resolving or accepting an open item, overriding a category, importing or clearing the " +
-  "ledger, regenerating a form, assembling a package and handing one off are actions a person " +
+  "regenerating a form, assembling a package and handing one off are actions a person " +
   "takes in the DO-09 console. Each is behind a dialog that states the consequence and requires " +
   "a typed note, and the note lands in the audit trail. Say what you would do and why, and let " +
   "the operator decide.";
@@ -254,7 +219,7 @@ export async function runNativeTool(
         return json(await documentList(input));
 
       case "get_document":
-        return json(await oneDocument(String(input.docId ?? "")));
+        return json(await oneDocument(input));
 
       case "search_documents":
         return json(await search(input));
@@ -287,12 +252,6 @@ export async function runNativeTool(
 
       case "list_exceptions":
         return json(await exceptionList(input));
-
-      case "reconciliation":
-        return json(await reconciliation(input));
-
-      case "list_ledger":
-        return json(await ledgerList(input));
 
       case "get_form_draft":
         return json(await formDraft(input));
@@ -339,13 +298,11 @@ async function resolvePeriod(input: Record<string, unknown>): Promise<string> {
 }
 
 async function periodStatus(periodId: string) {
-  const [period, settings, views, ledger, matches, exceptions, forms, packages, sources] =
+  const [period, settings, views, exceptions, forms, packages, sources] =
     await Promise.all([
       getPeriod(periodId),
       getSettings(),
       documentViews(periodId),
-      listLedger(periodId),
-      listMatches(periodId),
       listExceptions({ periodId }),
       listForms(periodId),
       listPackages(periodId),
@@ -371,10 +328,6 @@ async function periodStatus(periodId: string) {
       classified: views.filter((v) => v.classification).length,
       pendingClassification: views.filter((v) => v.extraction && !v.classification).length,
       needsReview: views.filter((v) => v.classification?.needsReview).length,
-      ledgerEntries: ledger.length,
-      matched: matches.filter((m) => m.kind === "matched").length,
-      documentOnly: matches.filter((m) => m.kind === "document-only").length,
-      ledgerOnly: matches.filter((m) => m.kind === "ledger-only").length,
     },
     exceptions: {
       open: open.length,
@@ -428,9 +381,6 @@ function compact(view: DocumentView) {
     categoryConfidence: view.classification?.confidence,
     needsReview: view.classification?.needsReview,
     reviewReason: view.classification?.reviewReason,
-    match: view.match
-      ? { kind: view.match.kind, score: view.match.score, amountDelta: view.match.amountDelta }
-      : undefined,
     openItems: view.exceptions
       .filter((exception) => exception.status === "open")
       .map((exception) => ({
@@ -462,179 +412,119 @@ async function documentList(input: Record<string, unknown>) {
   return {
     periodId,
     total: views.length,
-    /** Truncation is stated, never silent — a cut-off list read as a complete one is a wrong answer. */
     returned: Math.min(views.length, limit),
     documents: views.slice(0, limit).map(compact),
-    ...(views.length > limit
-      ? { note: `${views.length - limit} more documents match. Narrow the filter to see them.` }
-      : {}),
   };
 }
 
-async function oneDocument(docId: string) {
-  if (!docId) return { error: "docId is required." };
-  const doc = await listDocuments().then((all) => all.find((row) => row.id === docId));
-  if (!doc) {
-    return {
-      error: `No document with id ${docId}. Use search_documents to find it by name or vendor.`,
-    };
+/** One document in full: what was read off it, where it was placed, its flags. */
+async function oneDocument(input: Record<string, unknown>) {
+  const periodId = await resolvePeriod(input);
+  const docId = str(input.docId);
+  if (!docId) return { error: "Send a docId. list_documents returns them." };
+
+  const views = await documentViews(periodId);
+  const view = views.find((row) => row.doc.id === docId);
+  if (!view) {
+    return { error: `No document ${docId} in ${periodId}.`, total: views.length };
   }
-  const view = (await documentViews(doc.periodId)).find((row) => row.doc.id === docId);
-  if (!view) return { error: `Document ${docId} could not be joined to its period.` };
 
   return {
-    document: view.doc,
-    extraction: view.extraction ?? "Not read yet. This document has no figures on file.",
-    classification: view.classification ?? "Not categorised. It is on no form line.",
-    match: view.match ?? "No reconciliation row. It has been matched against nothing.",
-    exceptions: view.exceptions,
+    ...compact(view),
+    rationale: view.classification?.rationale,
+    alternatives: view.classification?.alternatives,
+    lineItems: view.extraction?.lineItems ?? [],
+    notes: view.extraction?.notes,
+    exceptions: view.exceptions.map((exception) => ({
+      id: exception.id,
+      kind: exception.kind,
+      severity: exception.severity,
+      status: exception.status,
+      title: exception.title,
+      detail: exception.detail,
+      suggestedAction: exception.suggestedAction,
+    })),
   };
 }
 
+/**
+ * Free-text search across the corpus.
+ *
+ * Substring matching over the fields a person would actually name — filename,
+ * vendor, invoice number, category. Not a ranked search: this is forty to a few
+ * hundred documents, and a model asking for "AWS" wants every AWS document
+ * rather than the best three.
+ */
 async function search(input: Record<string, unknown>) {
   const periodId = await resolvePeriod(input);
   const query = (str(input.query) ?? "").toLowerCase();
-  const limit = num(input.limit, 25);
-  if (!query) return { error: "query is required." };
+  if (!query) return { error: "Send a query." };
 
+  const limit = num(input.limit, 40);
   const views = await documentViews(periodId);
-  const hits = views.filter((view) => haystack(view).includes(query));
+
+  const hits = views.filter((view) => {
+    const categoryId = view.classification ? effectiveCategoryId(view.classification) : "";
+    return [
+      view.doc.filename,
+      view.extraction?.vendor,
+      view.extraction?.invoiceNumber,
+      categoryId,
+      categoryId ? categoryName(categoryId) : "",
+    ]
+      .filter(Boolean)
+      .some((field) => String(field).toLowerCase().includes(query));
+  });
 
   return {
     periodId,
     query,
     total: hits.length,
+    returned: Math.min(hits.length, limit),
     documents: hits.slice(0, limit).map(compact),
-    ...(hits.length > limit
-      ? { note: `${hits.length - limit} more documents match "${query}".` }
-      : {}),
-    ...(hits.length === 0
-      ? {
-          note:
-            `Nothing matched "${query}" among the ${views.length} documents collected for this ` +
-            "period. That means no collected document matches, not that no such document exists — " +
-            "one nobody sent is invisible here.",
-        }
-      : {}),
   };
 }
 
-/** Everything about a document a free-text search should reach. */
-function haystack(view: DocumentView): string {
-  const extraction = view.extraction;
-  return [
-    view.doc.filename,
-    view.doc.sourceDetail,
-    view.doc.sourceRef,
-    extraction?.vendor,
-    extraction?.vendorAddress,
-    extraction?.invoiceNumber,
-    extraction?.paymentMethod,
-    extraction?.notes,
-    extraction?.statusDetail,
-    ...(extraction?.lineItems ?? []).map((item) => item.description),
-    view.classification?.categoryId,
-    view.classification?.overriddenCategoryId,
-    view.classification?.rationale,
-    ...view.exceptions.map((exception) => `${exception.title} ${exception.detail}`),
-  ]
-    .filter(Boolean)
-    .join("   ")
-    .toLowerCase();
-}
-
+/** The flag list, filtered the way the console filters it. */
 async function exceptionList(input: Record<string, unknown>) {
   const periodId = await resolvePeriod(input);
-  const limit = num(input.limit, 60);
-  const severity = str(input.severity);
+  const status = str(input.status) as TaxException["status"] | undefined;
+  const kind = str(input.kind) as ExceptionKind | undefined;
 
-  let rows = await listExceptions({
-    periodId,
-    status: str(input.status) as never,
-    kind: str(input.kind) as never,
-    docId: str(input.docId),
+  const all = await listExceptions({ periodId });
+  const rows = all.filter((exception) => {
+    if (status && exception.status !== status) return false;
+    if (kind && exception.kind !== kind) return false;
+    return true;
   });
-  if (severity) rows = rows.filter((exception) => exception.severity === severity);
+
+  const open = all.filter((exception) => exception.status === "open");
 
   return {
     periodId,
-    total: rows.length,
-    exceptions: rows.slice(0, limit),
-    resolution:
-      "Closing any of these is a human action in the console. It requires a typed note, and the " +
-      "note is what makes the closed item mean something six months from now.",
-    ...(rows.length > limit ? { note: `${rows.length - limit} more items match.` } : {}),
-  };
-}
-
-async function reconciliation(input: Record<string, unknown>) {
-  const periodId = await resolvePeriod(input);
-  const limit = num(input.limit, 40);
-  const summary = await reconciliationSummary(periodId);
-
-  return {
-    periodId,
+    // Counts over the whole period, not the filtered slice: "2 open" because a
+    // filter is on would read as a period with two problems.
     counts: {
-      matched: summary.matched.length,
-      documentOnly: summary.documentOnly.length,
-      ledgerOnly: summary.ledgerOnly.length,
-      amountMismatches: summary.matched.filter((row) => row.match.amountDelta !== undefined).length,
+      total: all.length,
+      open: open.length,
+      high: open.filter((exception) => exception.severity === "high").length,
+      medium: open.filter((exception) => exception.severity === "medium").length,
+      low: open.filter((exception) => exception.severity === "low").length,
     },
-    matched: summary.matched.slice(0, limit).map((row) => ({
-      score: row.match.score,
-      reasons: row.match.reasons,
-      amountDelta: row.match.amountDelta,
-      document: row.doc
-        ? { docId: row.doc.doc.id, filename: row.doc.doc.filename, total: row.doc.extraction?.total }
-        : undefined,
-      ledger: row.entry
-        ? {
-            id: row.entry.id,
-            date: row.entry.date,
-            counterparty: row.entry.counterparty,
-            amount: row.entry.amount,
-            account: row.entry.account,
-          }
-        : undefined,
+    returned: rows.length,
+    exceptions: rows.map((exception) => ({
+      id: exception.id,
+      kind: exception.kind,
+      severity: exception.severity,
+      status: exception.status,
+      title: exception.title,
+      detail: exception.detail,
+      suggestedAction: exception.suggestedAction,
+      amount: exception.amount,
+      currency: exception.currency,
+      documents: exception.docIds,
+      resolutionNote: exception.resolutionNote,
     })),
-    documentOnly: summary.documentOnly.slice(0, limit).map((row) => ({
-      docId: row.doc.doc.id,
-      filename: row.doc.doc.filename,
-      vendor: row.doc.extraction?.vendor,
-      issueDate: row.doc.extraction?.issueDate,
-      total: row.doc.extraction?.total,
-      reasons: row.match.reasons,
-    })),
-    ledgerOnly: summary.ledgerOnly.slice(0, limit).map((row) => ({
-      ledgerEntryId: row.entry.id,
-      date: row.entry.date,
-      description: row.entry.description,
-      counterparty: row.entry.counterparty,
-      amount: row.entry.amount,
-      account: row.entry.account,
-      meaning: "A deduction claimed with no supporting document collected.",
-    })),
-  };
-}
-
-async function ledgerList(input: Record<string, unknown>) {
-  const periodId = await resolvePeriod(input);
-  const query = str(input.query)?.toLowerCase();
-  const limit = num(input.limit, 60);
-
-  let rows = await listLedger(periodId);
-  if (query) {
-    rows = rows.filter((entry) =>
-      `${entry.description} ${entry.counterparty} ${entry.ref ?? ""}`.toLowerCase().includes(query),
-    );
-  }
-
-  return {
-    periodId,
-    total: rows.length,
-    entries: rows.slice(0, limit),
-    readOnly: "This app never writes to the ledger. A disagreement with it is raised, not corrected.",
-    ...(rows.length > limit ? { note: `${rows.length - limit} more entries match.` } : {}),
   };
 }
 

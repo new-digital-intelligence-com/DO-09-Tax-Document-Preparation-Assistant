@@ -2,8 +2,6 @@ import { activePeriod, preparerConfigured, taxManagerConfigured } from "@/lib/se
 import { listDocuments, sourceBreakdown } from "@/lib/documents";
 import { listExtractions } from "@/lib/extract";
 import { categoryTotals, listClassifications } from "@/lib/classify";
-import { listLedger } from "@/lib/ledger";
-import { listMatches } from "@/lib/reconcile";
 import { listExceptions } from "@/lib/exceptions";
 import { listForms } from "@/lib/forms";
 import { listPackages } from "@/lib/packages";
@@ -26,13 +24,11 @@ export async function GET() {
     const period = await activePeriod();
     const periodId = period.id;
 
-    const [docs, extractions, classifications, entries, matches, exceptions, forms, packages, sources] =
+    const [docs, extractions, classifications, exceptions, forms, packages, sources] =
       await Promise.all([
         listDocuments({ periodId }),
         listExtractions(periodId),
         listClassifications(periodId),
-        listLedger(periodId),
-        listMatches(periodId),
         listExceptions({ periodId }),
         listForms(periodId),
         listPackages(periodId),
@@ -59,10 +55,6 @@ export async function GET() {
         classified: classifications.length,
         pendingClassification: Math.max(0, extracted - classifications.length),
         needsReview: classifications.filter((c) => c.needsReview).length,
-        ledgerEntries: entries.length,
-        matched: matches.filter((m) => m.kind === "matched").length,
-        documentOnly: matches.filter((m) => m.kind === "document-only").length,
-        ledgerOnly: matches.filter((m) => m.kind === "ledger-only").length,
       },
       exceptions: {
         open: open.length,

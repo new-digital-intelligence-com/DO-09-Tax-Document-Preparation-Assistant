@@ -59,7 +59,7 @@
       "id": "doc_f03",
       "file": "INV-2025-003 Cormorant Ventures.pdf",
       "source": "gmail",
-      "sourceDetail": "sent: accounts@northwind.studio → ap@cormorant.vc",
+      "sourceDetail": "sent: accounts@northwind.studio \u2192 ap@cormorant.vc",
       "sourceRef": "msg-18f2c9a1b0e3",
       "mimeType": "application/pdf",
       "bytes": 4469,
@@ -125,7 +125,7 @@
       "id": "doc_f06",
       "file": "INV-2025-006 Delta Freight Co.pdf",
       "source": "gmail",
-      "sourceDetail": "sent: accounts@northwind.studio → ap@deltafreight.co",
+      "sourceDetail": "sent: accounts@northwind.studio \u2192 ap@deltafreight.co",
       "sourceRef": "msg-18f5d1c4a992",
       "mimeType": "application/pdf",
       "bytes": 4013,
@@ -599,7 +599,7 @@
       "id": "doc_f26",
       "file": "Adobe_Invoice_ADB-88214 (1).pdf",
       "source": "drive",
-      "sourceDetail": "Finance/2025/Q1/Software — saved a second time from the same email",
+      "sourceDetail": "Finance/2025/Q1/Software \u2014 saved a second time from the same email",
       "sourceRef": "1dT0oU-adobe-invoice-adb-88214-1",
       "mimeType": "application/pdf",
       "bytes": 4158,
@@ -671,7 +671,7 @@
         "direction": "expense",
         "docType": "invoice-received",
         "expectedCategoryId": "expense-office",
-        "note": "Priced in euros. The period is USD, so this is flagged rather than converted — no exchange rate is stated on the document."
+        "note": "Priced in euros. The period is USD, so this is flagged rather than converted \u2014 no exchange rate is stated on the document."
       },
       "expectedExceptions": [
         "currency-mismatch"
@@ -862,7 +862,7 @@
         "docType": "invoice-received",
         "expectedCategoryId": "expense-contract-labor",
         "vendorTaxId": "84-1907733",
-        "note": "The negative case. Contract labour with a tax id on file and a period total of 520.00, below the 600.00 threshold — nothing should be raised against it."
+        "note": "The negative case. Contract labour with a tax id on file and a period total of 520.00, below the 600.00 threshold \u2014 nothing should be raised against it."
       },
       "expectedExceptions": []
     },
@@ -976,7 +976,6 @@
       ]
     }
   ],
-  "ledgerFile": "ledger-2025-q1.csv",
   "ledgerRowCount": 38,
   "ledgerColumns": [
     "date",
@@ -1207,7 +1206,7 @@
   "expectedClean": [
     {
       "docId": "doc_f35",
-      "why": "Contract labour, tax id printed, 520.00 in the period — below the 600.00 threshold. Nothing should be raised."
+      "why": "Contract labour, tax id printed, 520.00 in the period \u2014 below the 600.00 threshold. Nothing should be raised."
     },
     {
       "docId": "doc_f24",

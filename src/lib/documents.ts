@@ -9,7 +9,6 @@ import type {
   DocumentSource,
   DocumentView,
   Extraction,
-  Match,
   PrepStatus,
   SourceDocument,
   TaxException,
@@ -286,10 +285,6 @@ export async function removeDocument(id: string, actor: string, reason: string):
     next: rows.filter((row) => row.docId !== id),
     result: undefined,
   }));
-  await mutate<Match[], void>("matches", [], (rows) => ({
-    next: rows.filter((row) => row.docId !== id),
-    result: undefined,
-  }));
 
   await rm(await fileFor(doc), { force: true });
 
@@ -301,7 +296,7 @@ export async function removeDocument(id: string, actor: string, reason: string):
     detail:
       `Deleted ${doc.filename} (${doc.id}, sha256 ${doc.sha256.slice(0, 12)}, ingested ` +
       `${doc.ingestedAt} from ${doc.source}) along with its extraction, categorisation and ` +
-      `ledger match. Reason: ${note}`,
+      `Reason: ${note}`,
     periodId: doc.periodId,
     docId: doc.id,
   });
@@ -318,25 +313,31 @@ export async function removeDocument(id: string, actor: string, reason: string):
  * never a synthetic empty one — the console has to be able to tell "not read
  * yet" from "read, and it said nothing".
  */
+/**
+ * Delete a document's bytes while keeping its register row.
+ *
+ * Distinct from `removeDocument`, which forgets the document entirely. This is
+ * the prune path: the row, the extraction and every finding raised against it
+ * stay exactly as they are, and only the local copy of the file goes — because
+ * Drive has it and the viewer can fetch it from there.
+ */
+export async function removeLocalFile(id: string): Promise<void> {
+  const doc = await getDocument(id);
+  if (!doc) return;
+  await rm(await fileFor(doc), { force: true });
+}
+
 export async function documentViews(periodId: string): Promise<DocumentView[]> {
-  const [docs, extractions, classifications, matches, exceptions] = await Promise.all([
+  const [docs, extractions, classifications, exceptions] = await Promise.all([
     listDocuments({ periodId }),
     readStore<Extraction[]>("extractions", []),
     readStore<Classification[]>("classifications", []),
-    readStore<Match[]>("matches", []),
     readStore<TaxException[]>("exceptions", []),
   ]);
 
   const extractionByDoc = new Map(extractions.map((row) => [row.docId, row]));
   const classificationByDoc = new Map(classifications.map((row) => [row.docId, row]));
 
-  // Reconciliation pairs one-to-one, so the first match carrying a docId is the
-  // only one. Taking the first rather than merging keeps a stale row from a
-  // half-finished run from looking like two pairings.
-  const matchByDoc = new Map<string, Match>();
-  for (const match of matches) {
-    if (match.docId && !matchByDoc.has(match.docId)) matchByDoc.set(match.docId, match);
-  }
 
   const exceptionsByDoc = new Map<string, TaxException[]>();
   for (const exception of exceptions) {
@@ -351,7 +352,6 @@ export async function documentViews(periodId: string): Promise<DocumentView[]> {
     doc,
     extraction: extractionByDoc.get(doc.id),
     classification: classificationByDoc.get(doc.id),
-    match: matchByDoc.get(doc.id),
     exceptions: (exceptionsByDoc.get(doc.id) ?? []).sort(
       (a, b) =>
         Number(a.status !== "open") - Number(b.status !== "open") ||

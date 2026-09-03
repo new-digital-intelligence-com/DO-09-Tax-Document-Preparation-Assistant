@@ -5,8 +5,6 @@ import { categoryTotals } from "./classify";
 import { documentViews } from "./documents";
 import { listExceptions } from "./exceptions";
 import { generateAllForms, renderFormMarkdown } from "./forms";
-import { listLedger } from "./ledger";
-import { listMatches } from "./reconcile";
 import { getPeriod, getSettings, money, preparer, saveSettings } from "./settings";
 import { mutate, newId, readStore } from "./store";
 import { effectiveCategoryId } from "./types";
@@ -144,11 +142,9 @@ export async function assemble(
 
   const forms = await generateAllForms(periodId, actor);
 
-  const [views, totals, ledger, matches, open] = await Promise.all([
+  const [views, totals, open] = await Promise.all([
     documentViews(periodId),
     categoryTotals(periodId),
-    listLedger(periodId),
-    listMatches(periodId),
     listExceptions({ periodId, status: "open" }),
   ]);
 
@@ -188,10 +184,6 @@ export async function assemble(
       ).length,
       classified: views.filter((v) => v.classification).length,
       needsReview: views.filter((v) => v.classification?.needsReview).length,
-      ledgerEntries: ledger.length,
-      matched: matches.filter((m) => m.kind === "matched").length,
-      documentOnly: matches.filter((m) => m.kind === "document-only").length,
-      ledgerOnly: matches.filter((m) => m.kind === "ledger-only").length,
       openExceptions: open.length,
     },
     categoryTotals: totals,
@@ -307,17 +299,6 @@ export function renderPackageMarkdown(pkg: ReviewPackage, forms: FormDraft[]): s
     }
     out.push("");
 
-    if (pkg.counts.ledgerOnly > 0) {
-      out.push(
-        `A further ${pkg.counts.ledgerOnly} ledger ${
-          pkg.counts.ledgerOnly === 1 ? "entry has" : "entries have"
-        } no supporting document at all, so ${
-          pkg.counts.ledgerOnly === 1 ? "it appears" : "they appear"
-        } in no row above. They are in the Reconciliation panel under "ledger only", and each is ` +
-          "a deduction claimed with nothing behind it until someone produces the invoice.",
-      );
-      out.push("");
-    }
   }
 
   /* ── The drafted paragraph, marked as drafted. ─────────────────────── */
@@ -340,7 +321,7 @@ export function renderPackageMarkdown(pkg: ReviewPackage, forms: FormDraft[]): s
       "rather than decided here.",
   );
   out.push(
-    "- It is not a corrected ledger. Nothing in this app edits an accounting record or adjusts " +
+    "- It is not a corrected set of books. Nothing in this app edits an accounting record or adjusts " +
       "an amount to make two figures agree; a disagreement is raised as an open item and left " +
       "standing.",
   );
@@ -360,10 +341,6 @@ export function renderPackageMarkdown(pkg: ReviewPackage, forms: FormDraft[]): s
   out.push(`| Unreadable or failed | ${pkg.counts.unreadable} |`);
   out.push(`| Categorised | ${pkg.counts.classified} |`);
   out.push(`| Categorised but flagged for review | ${pkg.counts.needsReview} |`);
-  out.push(`| Ledger entries imported | ${pkg.counts.ledgerEntries} |`);
-  out.push(`| Matched to a ledger entry | ${pkg.counts.matched} |`);
-  out.push(`| Document with no ledger entry | ${pkg.counts.documentOnly} |`);
-  out.push(`| Ledger entry with no document | ${pkg.counts.ledgerOnly} |`);
   out.push(`| Open items | ${pkg.counts.openExceptions} |`);
   out.push("");
   if (pkg.counts.documents > pkg.counts.classified) {

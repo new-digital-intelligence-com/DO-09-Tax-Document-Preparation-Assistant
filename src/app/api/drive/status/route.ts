@@ -35,7 +35,12 @@ export async function GET() {
     return ok({
       ...status,
       folderId: env.folderId,
-      folderUrl: `https://drive.google.com/drive/folders/${env.folderId}`,
+      // The link goes to THIS user's folder, never the shared root. The root
+      // lists every workspace on the instance, and sending somebody there to
+      // look at their own documents shows them everybody else's folder names.
+      folderUrl: `https://drive.google.com/drive/folders/${folders.userFolderId}`,
+      rootUrl: `https://drive.google.com/drive/folders/${env.folderId}`,
+      userFolderName: folders.userFolderName,
       connectUrl: null,
       input: { id: folders.inputId, count: input.length, files: input.slice(0, 200) },
       output: { id: folders.outputId, count: output.length },

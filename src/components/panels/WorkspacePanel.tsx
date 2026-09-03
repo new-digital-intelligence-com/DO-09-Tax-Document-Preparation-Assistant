@@ -42,6 +42,7 @@ type DriveInfo = {
   folderId: string | null;
   folderUrl: string | null;
   connectUrl: string | null;
+  userFolderName?: string;
   input: { id: string; count: number } | null;
   output: { id: string; count: number } | null;
 };
@@ -158,7 +159,7 @@ export function WorkspacePanel() {
       {error && <ErrorNote title="The last action failed">{error}</ErrorNote>}
       {note && <Note>{note}</Note>}
 
-      <DriveStrip info={drive} error={driveError} onRetry={loadDrive} />
+      <DriveStrip info={drive} error={driveError} />
 
       <Section
         title="Run the period"
@@ -223,15 +224,7 @@ export function WorkspacePanel() {
  * "connected" need three different actions, and a boolean sends the operator to
  * fix the wrong one.
  */
-function DriveStrip({
-  info,
-  error,
-  onRetry,
-}: {
-  info: DriveInfo | null;
-  error: string;
-  onRetry: () => void;
-}) {
+function DriveStrip({ info, error }: { info: DriveInfo | null; error: string }) {
   if (error) {
     return (
       <ErrorNote title="The workspace folder could not be read">
@@ -286,9 +279,6 @@ function DriveStrip({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button size="sm" variant="ghost" onClick={onRetry}>
-          Refresh
-        </Button>
         {info.folderUrl && (
           <a
             href={info.folderUrl}
@@ -297,7 +287,7 @@ function DriveStrip({
             className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12.5px] text-ink-2 transition hover:border-border-strong hover:text-ink"
           >
             <Icon name="external" className="size-3.5" />
-            Open in Drive
+            Open
           </a>
         )}
       </div>

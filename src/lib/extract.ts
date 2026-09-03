@@ -18,7 +18,7 @@ import type { DocumentKind, Extraction, FilingPeriod, LineItem, SourceDocument }
  * Reading one document.
  *
  * This is the step where a wrong number gets born. Everything after it —
- * categorisation, reconciliation, the Schedule C draft — is arithmetic over
+ * categorisation, the Schedule C draft — is arithmetic over
  * whatever lands here, and arithmetic cannot tell a figure that was read from
  * a figure that was inferred. So the whole design of this module is about
  * refusing to produce the second kind:
@@ -354,8 +354,8 @@ function instructionFor(doc: SourceDocument, period: FilingPeriod): string {
  *
  * An extraction row carries only a `docId`, so the period filter is a join
  * against the document register rather than a field test. Sorted by `docId` so
- * two runs over the same corpus hand callers the same order — reconciliation
- * pairs greedily and a reshuffled input would pair differently.
+ * two runs over the same corpus hand callers the same order, so a re-run does
+ * not reshuffle a screen somebody is reading.
  */
 export async function listExtractions(periodId?: string): Promise<Extraction[]> {
   const rows = await readStore<Extraction[]>("extractions", []);
@@ -491,8 +491,8 @@ function nameKey(value: string): string {
  * most — and on a contractor's invoice addressed to us, that is us.
  *
  * The answer is always wrong and the cost is not cosmetic. `vendor` is what
- * reconciliation matches a ledger row against and what the 1099-NEC summary
- * groups contract labour by, so a contractor's fees attributed to us produce a
+ * the 1099-NEC summary groups contract labour by, so a contractor's fees
+ * attributed to us produce a
  * summary that lists the wrong payee and runs the reporting-threshold check
  * against the wrong person. This is cheap to detect and impossible to spot
  * downstream, so it is checked here rather than trusted.
@@ -598,8 +598,8 @@ function normalise(
   if (looksLikeUs(row.vendor, entity)) {
     // The re-ask did not take. Drop it rather than store it: a missing vendor
     // is a question a reviewer can answer from the page in one glance, and a
-    // wrong one is silent — it matches no ledger row, and if the document is
-    // contract labour it puts our own name on the 1099 summary as the payee.
+    // wrong one is silent — if the document is contract labour it puts our own
+    // name on the 1099 summary as the payee.
     row.notes = [
       row.notes,
       `The counterparty was read as "${row.vendor}", which is this entity. A document cannot ` +

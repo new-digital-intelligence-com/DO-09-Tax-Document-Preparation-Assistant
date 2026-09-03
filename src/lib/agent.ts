@@ -86,7 +86,7 @@ export async function runAgent({
  *
  * A model can hallucinate a tool, and the one it is most likely to hallucinate
  * here is the one a user just asked for: `file_return`, `resolve_exception`,
- * `fix_ledger`. Each of those comes back as a refusal naming the human route,
+ * `mark_final`. Each of those comes back as a refusal naming the human route,
  * because an error string would be reported to the user as a malfunction rather
  * than as the design.
  */
@@ -101,7 +101,7 @@ async function dispatch(
     error:
       `${name} is not a tool this assistant has, and this is deliberate rather than an outage. ` +
       `Nothing here files, submits or signs anything. Closing or accepting a finding, changing a ` +
-      `document's category, editing the ledger and handing off a package are actions a person ` +
+      `document's category and handing off a package are actions a person ` +
       `takes in the console, each one recording a note against their name. Say which screen does ` +
       `it and what they will need to write, and do not describe the action as done.`,
   });

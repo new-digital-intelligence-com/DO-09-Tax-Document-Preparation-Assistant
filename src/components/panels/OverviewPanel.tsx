@@ -85,13 +85,6 @@ export function OverviewPanel() {
       hint: c.pendingClassification > 0 ? `${c.pendingClassification} unsorted` : "all sorted",
     },
     {
-      label: "Reconcile",
-      path: "/api/reconcile",
-      icon: "reconciliation",
-      ready: c.matched + c.documentOnly + c.ledgerOnly === 0,
-      hint: `${c.ledgerEntries} ledger rows`,
-    },
-    {
       label: "Detect",
       path: "/api/exceptions/detect",
       icon: "flag",
@@ -114,9 +107,9 @@ export function OverviewPanel() {
 
       {!status.modelConfigured && (
         <ErrorNote title="No API key, so nothing can be read off a document">
-          ANTHROPIC_API_KEY is not set. Collection, reconciliation and the flag engine still work;
-          extraction and categorisation are the two steps that need a model, and they are blocked
-          rather than faked.
+          ANTHROPIC_API_KEY is not set. Collection and the flag engine still work; extraction and
+          categorisation are the two steps that need a model, and they are blocked rather than
+          faked.
         </ErrorNote>
       )}
 
@@ -229,7 +222,7 @@ export function OverviewPanel() {
 
       <InfoNote title="Nothing here files anything">
         Every form this console produces is a draft, and a tax manager decides. Differences between
-        a document and the ledger are reported, never adjusted away — the difference is the finding.
+        a document and what it should say are reported, never adjusted away.
       </InfoNote>
     </div>
   );
@@ -244,9 +237,6 @@ function summarise(label: string, value: Record<string, unknown>): string {
   }
   if (label === "Categorise") {
     return `Sorted ${n("classified") ?? 0}. ${n("needsReview") ?? 0} need a person's decision.`;
-  }
-  if (label === "Reconcile") {
-    return `${n("matched") ?? 0} matched, ${n("ledgerOnly") ?? 0} ledger rows with no document, ${n("documentOnly") ?? 0} documents with no ledger row, ${n("amountMismatches") ?? 0} amounts that disagree.`;
   }
   if (label === "Detect") {
     return `${n("raised") ?? 0} findings, ${n("carriedForward") ?? 0} carried forward with the notes already on them.`;

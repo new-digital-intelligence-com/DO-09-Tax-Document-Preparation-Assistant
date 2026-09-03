@@ -163,8 +163,8 @@ export function PackagePanel() {
       <div className="space-y-4">
         <NotLoaded what="A review package" action={assembleButton} />
         <InfoNote title="What assembling does">
-          It regenerates the drafts, then bundles them with the document index, the reconciliation
-          and every open item into one markdown pack. It files nothing and sends nothing.
+          It regenerates the drafts, then bundles them with the document index and every open item
+          into one markdown pack. It files nothing and sends nothing.
         </InfoNote>
       </div>
     );
@@ -190,17 +190,11 @@ export function PackagePanel() {
           value={c.needsReview}
           tone={c.needsReview > 0 ? "warn" : "default"}
         />
-        <Stat
-          label="No receipt"
-          value={c.ledgerOnly}
-          tone={c.ledgerOnly > 0 ? "crit" : "default"}
-          hint="ledger rows with nothing behind them"
-        />
       </StatGrid>
 
       <Section
         title="The pack"
-        description="Index, drafts, reconciliation and open items. Every form in it is a draft."
+        description="Index, drafts and open items. Every form in it is a draft."
         actions={
           <Toolbar>
             <DraftMark />

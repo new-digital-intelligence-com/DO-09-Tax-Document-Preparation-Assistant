@@ -17,7 +17,7 @@ import { Button, ErrorNote, Mono, textareaClass } from "@/components/ui";
 type Turn = { role: "user" | "assistant"; content: string; trace?: string[] };
 
 const STARTERS = [
-  "Which ledger entries have no supporting document?",
+  "Which documents could not be read?",
   "What is flagged high before I hand this to the accountant?",
   "What does the meals line come to, and why is it not the receipt total?",
   "Which documents could not be read?",
@@ -69,8 +69,7 @@ export function AskPanel() {
           {turns.length === 0 && (
             <div className="space-y-4">
               <p className="text-[13px] leading-relaxed text-ink-2">
-                It reads the register — documents, categories, the reconciliation, the exception
-                list and the drafts. It cannot resolve a flag, change a categorisation or file
+                It reads the register — documents, categories, the exception list and the drafts. It cannot resolve a flag, change a categorisation or file
                 anything; those are yours, in the console.
               </p>
               <div className="flex flex-wrap gap-2">

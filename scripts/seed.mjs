@@ -6,7 +6,6 @@
  *   node scripts/seed.mjs           # refuses if documents.json already has rows
  *   node scripts/seed.mjs --force   # replaces the register and the files
  *
- * It seeds **documents, the ledger and the filing period, and nothing else.**
  *
  * Not extractions. An extraction is a figure a model read off a page, and a
  * seeded one would put a number in the register that no model ever read —
@@ -70,63 +69,6 @@ async function writeJson(name, value) {
 
 /* ────────────────────────────────────────────────────────────────────────────
  * CSV
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * RFC 4180 by hand: quoted fields, embedded commas, doubled quotes, CRLF.
- *
- * The app has its own parser in `src/lib/ledger.ts`; this is a second one
- * because the seeder cannot import it. They must agree, and the corpus
- * deliberately contains a field with a comma and one with doubled quotes so a
- * disagreement shows up here rather than as two ledgers that differ by a row.
- */
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let quoted = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i += 1;
-        } else {
-          quoted = false;
-        }
-      } else {
-        field += ch;
-      }
-      continue;
-    }
-    if (ch === '"') quoted = true;
-    else if (ch === ",") {
-      row.push(field);
-      field = "";
-    } else if (ch === "\r") {
-      /* Swallowed; the \n that follows ends the row. */
-    } else if (ch === "\n") {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += ch;
-    }
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  // A trailing newline produces one empty row; drop it rather than importing a
-  // ledger entry with no date, which would then be flagged as missing support.
-  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""));
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
- * Documents
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -268,60 +210,6 @@ async function main() {
 
   await writeJson("documents", documents);
 
-  /* ── The ledger ────────────────────────────────────────────────────────── */
-
-  const csv = await readFile(path.join(FIXTURES, manifest.ledgerFile), "utf8");
-  const rows = parseCsv(csv);
-  const header = rows.shift()?.map((cell) => cell.trim().toLowerCase()) ?? [];
-  const column = (name) => header.indexOf(name);
-
-  const REQUIRED = ["date", "description", "counterparty", "amount", "currency", "account"];
-  const missing = REQUIRED.filter((name) => column(name) === -1);
-  if (missing.length) {
-    throw new Error(
-      `${manifest.ledgerFile} is missing the column(s) ${missing.join(", ")}. ` +
-        "Columns are found by name, never by position.",
-    );
-  }
-
-  const importedAt = new Date(started).toISOString();
-  const ledger = [];
-  const ledgerProblems = [];
-
-  rows.forEach((cells, i) => {
-    const line = i + 2; // header is line 1
-    const date = (cells[column("date")] ?? "").trim();
-    const amount = Number((cells[column("amount")] ?? "").trim().replace(/[$,]/g, ""));
-
-    // A row that cannot be parsed is reported with its line number, never
-    // dropped in silence: a ledger quietly one row short reconciles cleanly and
-    // hides the transaction that had no support.
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      ledgerProblems.push(`line ${line}: "${date}" is not an ISO date`);
-      return;
-    }
-    if (!Number.isFinite(amount)) {
-      ledgerProblems.push(`line ${line}: amount "${cells[column("amount")]}" is not a number`);
-      return;
-    }
-
-    ledger.push({
-      id: `led_${String(ledger.length + 1).padStart(3, "0")}`,
-      periodId,
-      date,
-      description: (cells[column("description")] ?? "").trim(),
-      counterparty: (cells[column("counterparty")] ?? "").trim(),
-      amount,
-      currency: ((cells[column("currency")] ?? "USD").trim() || "USD").toUpperCase(),
-      account: (cells[column("account")] ?? "").trim(),
-      ref: column("ref") === -1 ? undefined : (cells[column("ref")] ?? "").trim() || undefined,
-      source: "csv",
-      importedAt,
-    });
-  });
-
-  await writeJson("ledger", ledger);
-
   /* ── Settings ──────────────────────────────────────────────────────────── */
 
   const settings = buildSettings(manifest);
@@ -339,7 +227,6 @@ async function main() {
       subject: periodId,
       result: "ok",
       detail:
-        `Seeded ${documents.length} document(s) and ${ledger.length} ledger row(s) for ` +
         `${manifest.period.label} from fixtures/manifest.json` +
         `${force ? ", replacing the previous register (--force)" : ""}. ` +
         "No extraction, categorisation or exception was written: nothing has been read off " +
@@ -353,12 +240,10 @@ async function main() {
 
   const bySource = {};
   for (const doc of documents) bySource[doc.source] = (bySource[doc.source] ?? 0) + 1;
-  const money = ledger.reduce((sum, row) => sum + Math.abs(row.amount), 0);
 
   console.log(`Wrote .data/settings.json — ${manifest.period.label}, ${manifest.entity}, ${manifest.period.currency}, cash basis.`);
   console.log(`Wrote .data/documents.json — ${documents.length} document(s).`);
   console.log(`Copied ${documents.length} PDF(s) to .data/documents/<id>.pdf with a computed sha256.`);
-  console.log(`Wrote .data/ledger.json — ${ledger.length} row(s), ${money.toFixed(2)} of gross movement.`);
   console.log(`Appended one audit row: corpus.seed.`);
   console.log(`Sources: ${Object.entries(bySource).map(([k, v]) => `${k} ${v}`).join(", ")}.`);
 
@@ -368,16 +253,10 @@ async function main() {
     console.error("Re-run `npm run fixtures`; the corpus on disk is not the one the manifest describes.");
     process.exitCode = 1;
   }
-  if (ledgerProblems.length) {
-    console.error(`\n${ledgerProblems.length} ledger row(s) could not be imported:`);
-    for (const problem of ledgerProblems) console.error(`  ${problem}`);
-    process.exitCode = 1;
-  }
-
   console.log(
-    "\nNo extractions, categorisations, matches or exceptions were written. Nothing has been " +
-      "read off these documents yet — run extraction from the console, then categorisation, " +
-      "then reconciliation, and the findings will be ones a model and a rule actually produced.",
+    "\nNo extractions, categorisations or exceptions were written. Nothing has been read off " +
+      "these documents yet — run the period from the Workspace screen, and the findings will be " +
+      "ones a model and a rule actually produced.",
   );
 }
 

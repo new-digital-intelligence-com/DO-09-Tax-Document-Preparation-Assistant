@@ -74,38 +74,69 @@ export async function GET(request: Request) {
     return page("No authorisation code", "<p>Google sent no code back, so there is nothing to exchange.</p>", "bad");
   }
 
+  /*
+   * Only what happens before the token is stored can fail the connection.
+   *
+   * Everything after it is confirmation, and confirmation that fails must not
+   * be reported as a connection that failed. The first version of this handler
+   * did exactly that: the token was written, the folders were created, and the
+   * page said "could not complete the connection" because a follow-up lookup
+   * threw. The operator's next move is then to grant access again to fix
+   * something that was never broken — and the authorisation code is single-use,
+   * so that attempt fails too.
+   */
+  let refreshToken: string;
   try {
-    const { refreshToken } = await exchangeCode(code);
+    refreshToken = (await exchangeCode(code)).refreshToken;
     await storeRefreshToken(refreshToken);
-    forgetWorkspace();
+  } catch (cause) {
+    return page(
+      "Could not complete the connection",
+      `<p>${cause instanceof Error ? cause.message : "Unknown error"}</p>` +
+        `<p>Nothing was stored, so nothing is half-connected. Try ` +
+        `<a href="/api/drive/connect">granting access</a> again.</p>`,
+      "bad",
+    );
+  }
 
-    // Prove the token reaches the folder before claiming it is connected.
-    process.env.GOOGLE_REFRESH_TOKEN = refreshToken;
+  forgetWorkspace();
+  process.env.GOOGLE_REFRESH_TOKEN = refreshToken;
+
+  // Reaching the folders is reported separately, because it depends on a user
+  // having been chosen and on this process seeing the new environment — neither
+  // of which says anything about whether access was granted.
+  let checked: string;
+  try {
     const folders = await workspace();
+    checked =
+      `<p>The workspace was reached: <code>input</code> and <code>output</code> are both ready ` +
+      `inside <code>${folders.userFolderName}</code>.</p>`;
+  } catch (cause) {
+    checked =
+      `<p>The token is stored, but the folders could not be resolved from this process yet: ` +
+      `${cause instanceof Error ? cause.message : "unknown error"}. That is expected before a ` +
+      `restart, and expected if no workspace has been chosen yet.</p>`;
+  }
 
+  try {
     await record({
       actor: preparer(),
       action: "drive.connected",
       subject: driveEnv().folderId,
       result: "ok",
-      detail:
-        `Drive access granted and the refresh token stored in .env.local. Workspace resolved: ` +
-        `input ${folders.inputId}, output ${folders.outputId}.`,
+      detail: "Drive access granted and the refresh token stored in .env.local.",
     });
-
-    return page(
-      "Drive connected",
-      `<p>The refresh token is stored in <code>.env.local</code>, and the <code>input</code> and ` +
-        `<code>output</code> folders were both reached.</p>` +
-        `<p><strong>Restart the dev server</strong> so it picks the token up from the environment — ` +
-        `this process still holds the value it booted with.</p>`,
-      "ok",
-    );
-  } catch (cause) {
-    return page(
-      "Could not complete the connection",
-      `<p>${cause instanceof Error ? cause.message : "Unknown error"}</p>`,
-      "bad",
-    );
+  } catch {
+    // The audit trail is scoped to a user and nobody may have chosen one.
+    // Failing to note this is a far smaller problem than refusing a connection
+    // that succeeded.
   }
+
+  return page(
+    "Drive connected",
+    `<p>The refresh token is stored in <code>.env.local</code>.</p>${checked}` +
+      `<p><strong>Restart the dev server</strong> so it picks the token up from the environment — ` +
+      `this process still holds the value it booted with.</p>`,
+    "ok",
+  );
 }

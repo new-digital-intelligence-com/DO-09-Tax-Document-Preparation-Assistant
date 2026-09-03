@@ -14,7 +14,6 @@ export type IconName =
   | "overview"
   | "documents"
   | "categories"
-  | "reconciliation"
   | "exceptions"
   | "forms"
   | "package"
@@ -67,15 +66,6 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
 
-  /* Two columns being compared, with the link between them. */
-  reconciliation: (
-    <>
-      <rect x="3" y="4.5" width="6.5" height="15" rx="1.5" />
-      <rect x="14.5" y="4.5" width="6.5" height="15" rx="1.5" />
-      <path d="M9.8 9.4h4.4m0 0-1.5-1.5m1.5 1.5-1.5 1.5" />
-      <path d="M14.2 14.8H9.8m0 0 1.5-1.5m-1.5 1.5 1.5 1.5" />
-    </>
-  ),
 
   /* A flag on a pole — the product's own mark. */
   exceptions: (
