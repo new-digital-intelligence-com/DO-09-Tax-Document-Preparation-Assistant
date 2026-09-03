@@ -20,7 +20,6 @@ const STARTERS = [
   "Which documents could not be read?",
   "What is flagged high before I hand this to the accountant?",
   "What does the meals line come to, and why is it not the receipt total?",
-  "Which documents could not be read?",
 ];
 
 export function AskPanel() {
