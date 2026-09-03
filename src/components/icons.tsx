@@ -29,9 +29,6 @@ export type IconName =
   | "chevron"
   | "external"
   | "copy"
-  | "sun"
-  | "moon"
-  | "monitor"
   | "command"
   | "download"
   | "refresh"
@@ -168,22 +165,6 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="8.6" y="8.6" width="11.4" height="11.4" rx="2" />
       <path d="M15.4 5.6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.4a2 2 0 0 0 2 2" />
-    </>
-  ),
-
-  sun: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2.6v2.2M12 19.2v2.2M4.3 4.3l1.6 1.6M18.1 18.1l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.3 19.7l1.6-1.6M18.1 5.9l1.6-1.6" />
-    </>
-  ),
-
-  moon: <path d="M20 14.2A8.3 8.3 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z" />,
-
-  monitor: (
-    <>
-      <rect x="2.8" y="4.2" width="18.4" height="12.6" rx="2" />
-      <path d="M8.6 20.4h6.8M12 16.8v3.6" />
     </>
   ),
 

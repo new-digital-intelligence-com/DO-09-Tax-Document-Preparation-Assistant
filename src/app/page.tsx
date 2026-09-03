@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
-import { ThemeToggle } from "@/components/shell";
 import { UserPicker } from "@/components/UserPicker";
 import { Money } from "@/components/ui";
 import type { PrepStatus } from "@/lib/types";
@@ -102,7 +101,6 @@ export default function Home() {
               </span>
               {user.name}
             </button>
-            <ThemeToggle />
             <Link
               href="/prep"
               className="inline-flex h-9 items-center rounded-lg bg-solid px-3.5 text-[13px] font-medium text-solid-ink transition hover:bg-solid-hover"

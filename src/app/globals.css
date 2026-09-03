@@ -5,17 +5,21 @@
 
   Three decisions shape everything below.
 
-  1. Semantic tokens, not `dark:` variants. Every colour is a CSS variable that
-     flips in one place, so a component writes `bg-surface text-ink` once and is
-     correct in both themes. A codebase that sprinkles `dark:` across four
-     hundred class attributes gets a theme that is right in most places, and
-     "most places" is how a critical flag ends up unreadable at night.
+  1. Semantic tokens, not raw colours. Every colour is a CSS variable defined
+     once, so a component writes `bg-surface text-ink` rather than a hex value.
+     Changing the palette is one edit here rather than four hundred across the
+     class attributes.
+
+     This app is light, and only light. It is read side by side with scanned
+     documents, and a PDF renders on white whatever the surrounding chrome
+     does — a dark shell around a white page is the worst of both. There is no
+     dark theme and no toggle to find.
 
   2. NDI red is identity and alarm, never chrome. It marks the logo, the active
      section, the focus ring and a high-severity flag. It is deliberately NOT
-     the primary button — that is near-black on light and near-white on dark, so
-     the one red thing on a screen is the thing that matters. A red button next
-     to a red flag makes neither legible.
+     the primary button — that is near-black — so the one red thing on a screen
+     is the thing that matters. A red button next to a red flag makes neither
+     legible.
 
   3. Density is a feature. This is a tool for reading four hundred rows of
      figures, not a marketing page. Hairline borders, 36px table rows, tabular
@@ -77,117 +81,6 @@
 
   --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -8px rgb(0 0 0 / 0.14);
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.03);
-}
-
-/*
-  Dark is a first-class theme, not an inversion.
-
-  Surfaces lift rather than darken (`elevated` is lighter than `surface`, which
-  is lighter than `bg`), because on a dark ground a shadow reads as nothing and
-  elevation has to come from value. The brand red is lightened: #fe0100 on a
-  near-black ground vibrates and fails contrast on small text.
-*/
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-
-    --bg: #0c0c0e;
-    --surface: #141417;
-    --elevated: #1c1c20;
-    --sunken: #101013;
-
-    --border: #26262b;
-    --border-strong: #3a3a41;
-
-    --ink: #ededf0;
-    --ink-2: #a0a0aa;
-    --ink-3: #6e6e79;
-
-    --brand: #ff5a52;
-    --brand-ink: #ff837c;
-    --brand-soft: #2a1210;
-    --brand-line: #5c2320;
-
-    --solid: #ededf0;
-    --solid-hover: #ffffff;
-    --solid-ink: #16161a;
-
-    --focus: #ff5a52;
-
-    --ok-bg: #0b2418;
-    --ok-ink: #5fd396;
-    --ok-line: #1c4a33;
-
-    --warn-bg: #271d08;
-    --warn-ink: #e7b45c;
-    --warn-line: #4d3a12;
-
-    --crit-bg: #2a1211;
-    --crit-ink: #ff8a82;
-    --crit-line: #5c2422;
-
-    --info-bg: #101c33;
-    --info-ink: #7fa8f5;
-    --info-line: #23375f;
-
-    --neutral-bg: #1c1c20;
-    --neutral-ink: #9a9aa4;
-    --neutral-line: #2e2e34;
-
-    --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -12px rgb(0 0 0 / 0.7);
-    --shadow-card: none;
-  }
-}
-
-/* The manual toggle wins in both directions. */
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --bg: #0c0c0e;
-  --surface: #141417;
-  --elevated: #1c1c20;
-  --sunken: #101013;
-
-  --border: #26262b;
-  --border-strong: #3a3a41;
-
-  --ink: #ededf0;
-  --ink-2: #a0a0aa;
-  --ink-3: #6e6e79;
-
-  --brand: #ff5a52;
-  --brand-ink: #ff837c;
-  --brand-soft: #2a1210;
-  --brand-line: #5c2320;
-
-  --solid: #ededf0;
-  --solid-hover: #ffffff;
-  --solid-ink: #16161a;
-
-  --focus: #ff5a52;
-
-  --ok-bg: #0b2418;
-  --ok-ink: #5fd396;
-  --ok-line: #1c4a33;
-
-  --warn-bg: #271d08;
-  --warn-ink: #e7b45c;
-  --warn-line: #4d3a12;
-
-  --crit-bg: #2a1211;
-  --crit-ink: #ff8a82;
-  --crit-line: #5c2422;
-
-  --info-bg: #101c33;
-  --info-ink: #7fa8f5;
-  --info-line: #23375f;
-
-  --neutral-bg: #1c1c20;
-  --neutral-ink: #9a9aa4;
-  --neutral-line: #2e2e34;
-
-  --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -12px rgb(0 0 0 / 0.7);
-  --shadow-card: none;
 }
 
 @theme inline {
@@ -326,25 +219,9 @@ h1, h2, h3 {
 /*
   The logo.
 
-  The PNG has a white ground. `multiply` drops it cleanly on a light surface;
-  on a dark one that same ground would show as a white block, so the mark is
-  inverted instead. Handled here rather than with a `dark:` utility because
-  Tailwind's `dark:` follows `prefers-color-scheme` alone and would ignore the
-  manual `data-theme` override — giving a white box to anyone who chose dark on
-  a light system.
+  The PNG has a white ground, and `multiply` drops it cleanly on the light
+  surfaces this app uses everywhere.
 */
 .logo {
   mix-blend-mode: multiply;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .logo {
-    mix-blend-mode: normal;
-    filter: invert(1);
-  }
-}
-
-:root[data-theme="dark"] .logo {
-  mix-blend-mode: normal;
-  filter: invert(1);
 }

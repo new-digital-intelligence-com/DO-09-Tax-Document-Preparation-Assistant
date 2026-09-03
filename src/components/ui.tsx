@@ -11,7 +11,7 @@ import { useEffect, useId, useRef, useState } from "react";
  * is a severity nobody trusts.
  *
  * Colours come from the semantic tokens in `globals.css`. Nothing in this file
- * writes a hex value or a `dark:` variant.
+ * writes a hex value.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────

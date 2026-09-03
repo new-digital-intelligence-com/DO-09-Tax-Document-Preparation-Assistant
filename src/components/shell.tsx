@@ -50,82 +50,6 @@ export const SECTIONS: Section[] = [
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Theme
- * ────────────────────────────────────────────────────────────────────────── */
-
-type Theme = "system" | "light" | "dark";
-const THEME_KEY = "do09-theme";
-
-/**
- * Light unless somebody asks otherwise.
- *
- * "System" is the polite default and the wrong one here. This is a tool for
- * reading columns of figures against scanned documents, and a PDF renders on
- * white whatever the surrounding chrome does — a dark shell around a white page
- * is the worst of both. Dark is a deliberate choice a person can make; it is
- * not what the operating system should decide for them on first open.
- */
-const DEFAULT_THEME: Theme = "light";
-
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
-}
-
-/**
- * The theme control.
- *
- * The stored preference is read in an effect, which costs one frame of the
- * system theme before a manual override takes hold. The alternative is a
- * render-blocking script in the document head, and that trades a single frame
- * of flash for a script that must run before anything paints on every page
- * load — a worse deal, and one that is easy to get subtly wrong.
- */
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
-
-  useEffect(() => {
-    const stored = (() => {
-      try {
-        return localStorage.getItem(THEME_KEY) as Theme | null;
-      } catch {
-        return null;
-      }
-    })();
-    const initial =
-      stored === "light" || stored === "dark" || stored === "system" ? stored : DEFAULT_THEME;
-    setTheme(initial);
-    applyTheme(initial);
-  }, []);
-
-  const cycle = () => {
-    const next: Theme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-    setTheme(next);
-    applyTheme(next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {
-      // A browser with site data blocked still gets a working toggle for this
-      // session; only the memory of it is lost.
-    }
-  };
-
-  const icon: IconName = theme === "light" ? "sun" : theme === "dark" ? "moon" : "monitor";
-
-  return (
-    <button
-      onClick={cycle}
-      title={`Theme: ${theme}`}
-      aria-label={`Theme: ${theme}. Click to change.`}
-      className="inline-flex size-7 items-center justify-center rounded-md text-ink-3 transition hover:bg-sunken hover:text-ink"
-    >
-      <Icon name={icon} className="size-3.5" />
-    </button>
-  );
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
  * Command palette
  * ────────────────────────────────────────────────────────────────────────── */
 
@@ -377,11 +301,9 @@ export function AppShell({
           is never hidden behind a hamburger. */}
       <aside className="sticky top-0 z-30 shrink-0 border-b border-border bg-surface lg:h-dvh lg:w-[232px] lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between gap-2 px-4 py-3.5 lg:py-4">
+          <div className="flex items-center gap-2 px-4 py-3.5 lg:py-4">
             <Link href="/" className="flex min-w-0 items-center gap-2.5">
-              {/* `.logo` in globals.css handles the white ground in both
-                  themes — see the comment there for why it is not a `dark:`
-                  utility. */}
+              {/* `.logo` in globals.css multiplies away the PNG's white ground. */}
               <Image
                 src="/logo.png"
                 alt="NDI — New Digital Intelligence"
@@ -394,7 +316,6 @@ export function AppShell({
                 DO-09
               </span>
             </Link>
-            <ThemeToggle />
           </div>
 
           <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-1 lg:flex-col lg:gap-0.5 lg:overflow-y-auto lg:pb-0">
