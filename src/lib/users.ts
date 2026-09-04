@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { scopedWorkspaceId } from "./workspace-context";
 import { driveConfigured, driveEnv, ensureFolder, findInFolder, listRootFolders, putJson, readTextFile } from "./drive";
 
 /**
@@ -177,6 +178,17 @@ export async function getUser(id: string): Promise<User | undefined> {
  * would show one person's figures under another person's name.
  */
 export async function activeUser(): Promise<User | undefined> {
+  /*
+   * A call carrying its own workspace wins over the cookie.
+   *
+   * The console selects with a cookie because a browser resends it. The MCP
+   * server cannot: every JSON-RPC call is a separate stateless request, so its
+   * selection travels with the call instead. Checking that first keeps every
+   * function below this one unaware that there are two ways in.
+   */
+  const scoped = scopedWorkspaceId();
+  if (scoped) return getUser(scoped);
+
   const store = await cookies();
   const id = store.get(ACTIVE_USER_COOKIE)?.value;
   if (!id) return undefined;
