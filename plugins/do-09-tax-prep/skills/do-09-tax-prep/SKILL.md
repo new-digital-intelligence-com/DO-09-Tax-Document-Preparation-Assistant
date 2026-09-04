@@ -27,7 +27,7 @@ then pass `workspaceId`. None → `create_workspace`.
 
 | They want | Call |
 |---|---|
-| Add an attached receipt | `add_document` — bytes in `contentBase64`. Uploads, reads and categorises in one call. |
+| Add an attached receipt | `upload_document` → it returns a URL → run the one `curl` it gives you. That prints the finished result. **Never base64 the file**: its output cannot be moved into a tool argument, which is why that route wastes minutes and uploads nothing. |
 | Add files from their Drive | `search_my_drive` → offer as options → `import_from_drive` |
 | Pick up something dropped in the folder | `sync_drive_folder` |
 | Where things stand | `period_status` |

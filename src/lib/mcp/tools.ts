@@ -27,6 +27,7 @@ import { createUser, listUsers } from "../users";
 import { processDocument, purgeDocument, syncFromDrive } from "../workspace-sync";
 import { effectiveCategoryId } from "../types";
 import { withWorkspace } from "../workspace-context";
+import { mintUploadTicket } from "./upload-token";
 
 /**
  * The workspace, as tools rather than as instructions.
@@ -329,28 +330,69 @@ export function registerTools(server: McpServer): void {
   /* ── Adding documents ───────────────────────────────────────────────── */
 
   server.registerTool(
+    "upload_document",
+    {
+      title: "Add a file — the fast path",
+      description:
+        "USE THIS for any file on disk, which is every attachment. Returns a URL. Run exactly " +
+        "one command:\n\n" +
+        "    curl -sS -X PUT --data-binary @<path> \"<uploadUrl>\"\n\n" +
+        "The bytes go straight from your sandbox to the server — they never pass through the " +
+        "conversation — and curl prints the finished result: registered, read and categorised. " +
+        "Report that. Do not base64 the file, do not read it first, do not call add_document.",
+      inputSchema: {
+        ...WORKSPACE_ARG,
+        filename: z.string().describe("The original filename, unchanged."),
+        mimeType: z.string().optional().describe("Defaults to application/pdf."),
+      },
+    },
+    async ({ workspaceId, filename, mimeType }) =>
+      guard2(workspaceId, "An upload URL could not be issued.", async () => {
+        const users = await listUsers();
+        const resolved = workspaceId ?? (users.length === 1 ? users[0].id : undefined);
+        if (!resolved) throw new Error("Pass workspaceId — several workspaces exist.");
+
+        const ticket = mintUploadTicket({
+          workspaceId: resolved,
+          filename,
+          mimeType: mimeType || "application/pdf",
+        });
+        const base = process.env.PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+
+        return {
+          uploadUrl: `${base}/api/upload/${ticket}`,
+          run: `curl -sS -X PUT --data-binary @<path-to-file> "${base}/api/upload/${ticket}"`,
+          expiresInMinutes: 10,
+          then: "curl prints the result. Report it. Nothing else to call.",
+        };
+      }),
+  );
+
+  server.registerTool(
     "add_document",
     {
-      title: "Add a document",
+      title: "Add a document from bytes you already hold",
       description:
-        "Upload a file, register it, read it and categorise it — ONE call, and it should be your " +
-        "first action when somebody attaches a receipt. Do not search for other tools, do not " +
-        "prepare or encode the file as a separate step, do not check whether it was attached: put " +
-        "the bytes in `contentBase64` and call this. Anything before it is a round trip spent " +
-        "before a byte has moved. Returns what was read and where it landed. A byte-identical duplicate " +
-        "is kept rather than refused: the same invoice arriving twice is a finding for a person, " +
-        "and a vendor billing twice looks identical to a folder syncing twice from here.",
+        "Only for content you can already produce as text — a file you generated yourself. " +
+        "**For anything on disk, including every attachment, use upload_document instead**: " +
+        "base64 of a real file is thousands of tokens you would have to type out, and running " +
+        "`base64` in a shell does not help because its output cannot be moved into this argument.",
       inputSchema: {
         ...WORKSPACE_ARG,
         filename: z.string(),
-        contentBase64: z.string().describe("The file's bytes, base64 encoded."),
+        contentBase64: z.string().min(1).describe("The file's bytes, base64 encoded."),
         mimeType: z.string().optional().describe("Defaults to application/pdf."),
       },
     },
     async ({ workspaceId, filename, contentBase64, mimeType }) =>
       guard2(workspaceId, "That document could not be added.", async () => {
         const bytes = Buffer.from(contentBase64, "base64");
-        if (bytes.length === 0) throw new Error("contentBase64 decoded to nothing.");
+        if (bytes.length === 0) {
+          throw new Error(
+            "contentBase64 decoded to nothing. If the file is on disk, use upload_document — " +
+              "it takes a path and needs no encoding.",
+          );
+        }
 
         const period = await activePeriod();
         const { doc, duplicateOf } = await ingest({
@@ -366,9 +408,7 @@ export function registerTools(server: McpServer): void {
         const outcome = await processDocument(doc.id, { actor: preparer() });
         return {
           document: { id: doc.id, filename: doc.filename, bytes: doc.bytes, sha256: doc.sha256 },
-          duplicateOf: duplicateOf
-            ? { id: duplicateOf.id, filename: duplicateOf.filename }
-            : null,
+          duplicateOf: duplicateOf ? { id: duplicateOf.id, filename: duplicateOf.filename } : null,
           read: outcome,
         };
       }),
