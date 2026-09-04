@@ -340,10 +340,12 @@ export function registerTools(server: McpServer, origin: string): void {
   server.registerTool(
     "upload_document",
     {
-      title: "Add a file — the fast path",
+      title: "Add a receipt, invoice or document to the tax workspace",
       description:
-        "USE THIS for any file on disk, which is every attachment. Returns a URL. Run exactly " +
-        "one command:\n\n" +
+        "THE way to add a receipt, invoice, bill or any attached document to this tax workspace. " +
+        "Use this the moment somebody says add / upload / attach a receipt or invoice — it is " +
+        "for THIS workspace, not a general file host, so never substitute an upload tool from " +
+        "another connector. Returns a URL. Run exactly one command:\n\n" +
         "    curl -sS -X PUT --data-binary @<path> \"<uploadUrl>\"\n\n" +
         "The bytes go straight from your sandbox to the server — they never pass through the " +
         "conversation — and curl prints the finished result: registered, read and categorised. " +
