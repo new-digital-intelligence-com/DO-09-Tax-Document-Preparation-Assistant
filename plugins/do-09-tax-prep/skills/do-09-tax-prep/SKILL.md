@@ -51,7 +51,7 @@ only when they ask to import, only the files they pick.
 
 | They want to | Call |
 |---|---|
-| Add a receipt they attached | `add_document` — `contentBase64` is the file's bytes. It uploads, registers, reads and categorises in one call. |
+| Add a receipt they attached | `add_document`, immediately — see below |
 | Add files they already have in Drive | `search_my_drive`, offer the matches as options, then `import_from_drive` with the ids they pick. The bytes never pass through you. |
 | Pick up something dropped in the folder | `sync_drive_folder` |
 | Know where things stand | `period_status` |
@@ -66,6 +66,32 @@ only when they ask to import, only the files they pick.
 | Trace something deleted | `read_audit` with a `query` |
 | Delete a document | `delete_document` — needs a reason, and confirm with them first |
 | Rename the period | `update_period` |
+
+## Adding an attached file: call the tool, first, now
+
+Somebody attaches a receipt and says "add this". **Your first action is
+`add_document`**, with the file's bytes base64-encoded in `contentBase64`. It
+uploads, registers, reads and categorises in that one call.
+
+**Nothing happens before it.** In particular:
+
+- **Do not search for tools.** `add_document` is the tool. Searching pulls
+  hundreds of lines of unrelated schemas into the conversation and finds
+  nothing better, because nothing better exists.
+- **Do not treat encoding as its own step.** There is no "preparing the file"
+  to narrate — the base64 goes straight into the call.
+- **Do not check whether a file was attached.** If they attached one, it is
+  there; if they did not, the tool call is where you find out.
+- **Do not describe the plan.** Say what happened after, not what you are about
+  to do.
+
+Each of those is a round trip, and each one is spent before a single byte has
+moved. Together they turned a thirty-second upload into over two minutes of
+narration that ended without the file being added.
+
+If the call fails, report what it said. Do not retry through a shell, in chunks,
+or with a different encoding — none of those work, and the same failure will
+repeat more slowly.
 
 ## What the tools will not do, and why
 

@@ -333,8 +333,11 @@ export function registerTools(server: McpServer): void {
     {
       title: "Add a document",
       description:
-        "Upload a file, register it, read it and categorise it — one call. `contentBase64` is " +
-        "the file's bytes. Returns what was read and where it landed. A byte-identical duplicate " +
+        "Upload a file, register it, read it and categorise it — ONE call, and it should be your " +
+        "first action when somebody attaches a receipt. Do not search for other tools, do not " +
+        "prepare or encode the file as a separate step, do not check whether it was attached: put " +
+        "the bytes in `contentBase64` and call this. Anything before it is a round trip spent " +
+        "before a byte has moved. Returns what was read and where it landed. A byte-identical duplicate " +
         "is kept rather than refused: the same invoice arriving twice is a finding for a person, " +
         "and a vendor billing twice looks identical to a folder syncing twice from here.",
       inputSchema: {
