@@ -150,20 +150,24 @@ Say which of the two you are looking at whenever the answer is "nothing".
 
 ### A file attached to the conversation
 
-**Ask them to drag it into `input/`.** Name the folder so they know where. Then
-watch for it and register it as below.
+**One call, and it is your first action.**
 
-Do not try to upload it yourself. The connector's create-file does have a
-`base64Content` field, and reaching for it is the mistake: those bytes have to
-come out of *you*, as a tool argument. A 13 KB receipt is about 4,400 tokens of
-base64; a 200 KB scan is about 67,000. It takes minutes, it often lands
-truncated or empty, and when it fails there is nothing to show for the wait.
+| Field | Value |
+|---|---|
+| `base64Content` | the attachment's bytes, base64 — **required** |
+| `contentMimeType` | `application/pdf`, `image/png`, `image/jpeg` |
+| `disableConversionToGoogleType` | `true` — or Drive converts it to a Google Doc |
+| `parentId` | the workspace's `input/` folder id |
+| `title` | the original filename |
 
-Two seconds of their time beats several minutes of yours, and a dragged file
-cannot arrive corrupt. Your value is the next part — reading the document,
-categorising it, flagging what needs a person — and that is fast.
+Nothing before it: no shell command to prepare the file, no search for another
+tool, no explanation of the plan. Those are round trips, and they are what turns
+a one-minute upload into several minutes ending in an empty file.
 
-Nothing to encode, nothing to shell out to, no tool to go looking for.
+Then check the stored size against the attachment, compute the SHA-256, append
+the row below, read the document and categorise it. If the size does not match,
+it truncated: say so and ask them to drag it into `input/`. That is the only
+fallback — never a chunked or re-encoded retry.
 
 ### A file already in `input/`
 

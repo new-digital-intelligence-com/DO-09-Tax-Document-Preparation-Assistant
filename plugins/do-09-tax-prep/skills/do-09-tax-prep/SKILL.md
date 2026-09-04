@@ -35,7 +35,7 @@ read the part you need, not the whole file.
 
 | They want to | You |
 |---|---|
-| **Add an attached file** | **Ask them to drop it into `input/` in Drive** — one drag, two seconds. Say the folder name. Then watch for it and do the real work: register, read, categorise, audit. Do **not** try to upload it yourself; see below. |
+| **Add an attached file** | **First action: call create-file with `base64Content`.** No shell command first, no tool search, no plan. Then register, read, categorise, audit. |
 | **Add from their Drive** | Search *their* Drive, offer matches as options, copy only what they tick, then as above. |
 | Know where things stand | Count `documents.json`, `extractions.json`, `classifications.json`, `exceptions.json`. Lead with what is still open, before any money. |
 | Know if they have an X | Search `extractions.json` — vendor, filename, invoice number, line items, notes. Match on any word, not the phrase. An empty result is a complete answer. |
@@ -71,18 +71,29 @@ conversation is stale the moment anything is added.
 trash, and `audit.json`; a second file with the same name silently forks the
 register.
 
-**Never try to move a file's bytes yourself.** The Drive connector's create-file
-does take `base64Content`, and it is a trap: the bytes have to be emitted by you
-as a tool argument, which is roughly 4,400 tokens for a 13 KB receipt and 67,000
-for a normal 200 KB scan. It takes minutes, it frequently arrives truncated or
-empty, and it can fail after all that time with nothing to show.
+**Adding a file is one tool call.** Drive connector, create-file:
 
-So do not encode a file, do not shell out to read one, do not chunk and
-reassemble, and do not go hunting for a tool that might do it. **Ask them to
-drag it into `input/`.** That is two seconds of their time against several
-minutes of yours, and it cannot arrive corrupt. Then do the part that is
-actually worth doing — reading it, categorising it, flagging what needs a
-person — which takes seconds.
+| Field | Value |
+|---|---|
+| `base64Content` | the attachment's bytes, base64 — **required, and the whole point** |
+| `contentMimeType` | `application/pdf`, `image/png`, `image/jpeg` |
+| `disableConversionToGoogleType` | `true` |
+| `parentId` | the workspace's `input/` folder id |
+| `title` | the original filename |
+
+Emit the base64 straight into that call. It is a few thousand tokens for a
+receipt — that is the cost, and it is paid once.
+
+**What must not happen is anything before it.** Do not run a shell command to
+prepare the file. Do not search for a better tool; there isn't one. Do not
+describe what you are about to do. Every one of those adds a round trip, and
+three of them turned a one-minute upload into four and a half minutes that ended
+with an empty file because `base64Content` never got filled in.
+
+If the call comes back with a size that does not match the attachment, it
+truncated: say so and ask them to drag the file into `input/` instead. That is
+the only fallback — never retry through a shell, a chunked transfer or a
+different encoding.
 
 **Nothing is filed, and you give no tax advice.** Deductibility, capitalise or
 expense, business-use fraction — those go to the tax manager with the document.
