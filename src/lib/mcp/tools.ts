@@ -787,6 +787,53 @@ export function registerTools(server: McpServer, origin: string): void {
   );
 
   server.registerTool(
+    "get_package",
+    {
+      title: "The pack itself",
+      description:
+        "The assembled pack as markdown, ready to paste into an email. This is the ONLY tool " +
+        "that returns the full text — `assemble_package` deliberately returns a description of " +
+        "it, because the whole thing is long. Call this when you are about to send the pack and " +
+        "not otherwise. Omit `packageId` for the most recent one.",
+      inputSchema: {
+        ...WORKSPACE_ARG,
+        packageId: z.string().optional().describe("Defaults to the most recently assembled."),
+      },
+    },
+    async ({ workspaceId, packageId }) =>
+      guard2(workspaceId, "The package could not be read.", async () => {
+        const period = await activePeriod();
+
+        const pkg = packageId
+          ? await getPackage(packageId)
+          : (await listPackages(period.id)).sort((a, b) =>
+              b.createdAt.localeCompare(a.createdAt),
+            )[0];
+
+        if (!pkg) {
+          throw new Error(
+            packageId
+              ? `No package with id ${packageId}.`
+              : "No package has been assembled for this period yet. Run assemble_package first.",
+          );
+        }
+
+        const forms = await listForms(period.id);
+        return {
+          packageId: pkg.id,
+          createdAt: pkg.createdAt,
+          openItems: pkg.openExceptionIds.length,
+          subject: `DRAFT for review — ${period.label} ${period.entity}`,
+          markdown: pkg.markdown ?? renderPackageMarkdown(pkg, forms),
+          sending:
+            "Send it yourself, then call hand_off_package with this packageId so the register " +
+            "records who has it. Mail first, record second: a handoff written against a message " +
+            "that never sent leaves the register claiming a review nobody was told about.",
+        };
+      }),
+  );
+
+  server.registerTool(
     "hand_off_package",
     {
       title: "Record the handoff",
@@ -820,12 +867,12 @@ export function registerTools(server: McpServer, origin: string): void {
     {
       title: "Email the package to the reviewer",
       description:
-        "Sends the pack from the workspace owner's own address and records the handoff in the " +
-        "same act — so the register can never say a review is under way that nobody was told " +
-        "about. Requires their Google account to be connected with send permission; " +
-        "connection_status says whether it is. **Confirm the recipient with the user first.** " +
-        "There is no draft mode: the tax manager receives whatever you send, so never call this " +
-        "to check that it works.",
+        "Sends the pack through this deployment's own Gmail credentials. **Prefer sending it " +
+        "yourself — get_package for the text, your own mail tool to send, then hand_off_package " +
+        "to record it.** This route needs the Gmail API enabled on the deployment's Google " +
+        "Cloud project and fails with a 403 when it is not, which is a setting no amount of " +
+        "reconnecting fixes. **Confirm the recipient with the user first.** There is no draft " +
+        "mode: the recipient receives whatever you send, so never call this to check it works.",
       inputSchema: {
         ...WORKSPACE_ARG,
         packageId: z.string(),

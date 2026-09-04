@@ -20,8 +20,15 @@ The connector holds the workspace and does the work — uploading the file,
 reading the document, categorising it, writing the audit row. You are not doing
 any of that yourself and you are not inventing any of it.
 
-Other connectors may be attached for other reasons. **None is part of this job.**
-Never search anybody's mail, for any reason, including being asked to.
+Other connectors may be attached for other reasons. **One of them has a job here
+and it is a single job: sending the finished pack.** Nothing else about this work
+touches another connector.
+
+**Never read, search or list anybody's mail. Not to find a receipt, not to check
+an invoice, not because you were asked to.** A question about what somebody has
+is answered by `search_documents` and by nothing else — if it is not in the
+workspace, the answer is that it is not in the workspace. Mail is write-only
+here: you send one message and you never look at the mailbox.
 
 ## Start
 
@@ -41,7 +48,8 @@ then pass `workspaceId`. None → `create_workspace`.
 | Totals | `category_totals` · the rules behind them: `list_categories` |
 | What is flagged | `list_findings` · recompute: `detect_findings` |
 | The forms | `draft_forms` · one form: `get_form` |
-| The pack | `assemble_package` → `send_package`, or `hand_off_package` to record without sending |
+| The pack | `assemble_package` → confirm the recipient → `get_package` → **send it with your own mail tool** → `hand_off_package` to record it. In that order: mail first, register second, because a handoff recorded against a message that never sent leaves the register claiming a review nobody was told about. Do not use `send_package` — it goes through the deployment's own credentials and needs an API enabled that is not. |
+| The pack, without sending it | `assemble_package` → `hand_off_package`. Only when they are delivering it themselves. |
 | Trace something deleted | `read_audit` with a `query` |
 | Delete a document | `delete_document` — needs a reason; confirm first |
 | Rename the period | `update_period` |
