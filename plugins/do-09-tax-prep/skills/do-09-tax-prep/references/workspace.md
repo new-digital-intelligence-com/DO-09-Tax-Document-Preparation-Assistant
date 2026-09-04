@@ -89,46 +89,40 @@ not collide. Make `input/`, `output/` and `state/` inside it, and write:
 time you report anything from it, and do not silently switch. If a request is
 plainly about another, ask before crossing.
 
-## The folder holds the current state and nothing else
+## Updating a state file: create, then trash
 
-**`state/` contains exactly one file per collection. Never more.** No backups,
-no copies, no dated variants, no snapshots, no `.bak`, no `-predelete`, no
-`-old`, no `-copy`. Not before a delete, not before a risky edit, not "just in
-case". If you are about to create a second file, stop: you are about to make
-the register ambiguous.
+**The connector cannot overwrite a file's contents.** Its update call changes
+the title and the parent and nothing else; only create carries content. So a
+state file is replaced, not edited, and the order matters:
 
-This is not tidiness. Two files called `classifications.json` in one folder is a
-register that has silently forked. Drive allows duplicate names, so nothing
-errors — one process reads one copy and writes to it, another reads the other,
-and the categorisations diverge with no sign that anything is wrong. A person
-looking at the folder cannot tell which is real, and neither can you.
+1. **Read** the existing file and its id.
+2. **Create** the replacement with the same name in `state/`, full new content.
+3. **Trash** the old id.
 
-Backups are already handled and are not your job:
+That order is deliberate. Creating first means a failure anywhere leaves the old
+file intact and you have lost nothing; trashing first means a failure loses the
+register. For a few seconds there are two files with that name — that is the
+cost of the connector not having an overwrite, and it is the only moment two are
+allowed to exist.
 
-- **Drive keeps its own version history** on every file. A bad write is
-  recoverable from Drive's own UI, with timestamps and authors.
-- **Deleting a document trashes rather than erases**, so it is recoverable from
-  Drive's trash for weeks.
-- **`state/audit.json` is the trail.** Everything that happened is recorded
-  there, in one file, which is why there is no need to leave the evidence lying
-  around as copies of other files.
+**Never stop after step 2.** Two permanent files with one name is a register
+that has silently forked: Drive allows it and reports no error, one reader takes
+one copy and another takes the other, and the figures diverge with nothing
+showing it. If you ever find a pair, read both, keep the fuller or newer one,
+trash the other, and say what you did.
 
-A copy you made adds nothing any of those do not already do, and it costs the
-one property the folder must have: one file per collection, so that everything
-reading it agrees on what the current state is.
+The new file gets a new Drive id and the old file's version history goes with
+it. That is unavoidable here and it is not a reason to skip the write — the
+trail in `audit.json` is what records what happened, and Drive's trash keeps the
+old copy for weeks either way.
 
-### Writing a collection: update, never create a second
+### Nothing else may be left behind
 
-Every write is an **update of the existing file**, in place, keeping its id:
-
-1. Find the file by name in `state/`.
-2. If it exists, **overwrite that file's content**. Do not create a new one.
-3. Only when it does not exist at all do you create it.
-
-If you ever find **two files with the same name** in `state/`, that fork has
-already happened. Do not guess: read both, keep the one with more rows or the
-later modification time, say what you did and why, and remove the other. Never
-leave two behind.
+No backups, no `.bak`, no `-predelete`, no dated copies, no snapshots — not
+before a delete, not before a risky edit, not "just in case". Drive keeps
+version history, deletes go to the trash, and `audit.json` is the record. A copy
+you leave in the folder adds none of that and costs the one property the folder
+must have: one file per collection.
 
 ## Reading the register
 
