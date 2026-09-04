@@ -79,7 +79,7 @@ function unauthorised(detail: string) {
  * the server calls — so satisfying it is cheaper than hand-rolling `initialize`,
  * `tools/list` and `tools/call` and getting a detail of the spec subtly wrong.
  */
-async function handle(message: JSONRPCMessage): Promise<JSONRPCMessage | null> {
+async function handle(message: JSONRPCMessage, origin: string): Promise<JSONRPCMessage | null> {
   const server = new McpServer(
     { name: "do-09-tax-prep", version: "1.0.0" },
     {
@@ -88,7 +88,7 @@ async function handle(message: JSONRPCMessage): Promise<JSONRPCMessage | null> {
         "one person's business. Nothing here files, submits or signs a return.",
     },
   );
-  registerTools(server);
+  registerTools(server, origin);
 
   let reply: JSONRPCMessage | null = null;
   let resolveReply: (() => void) | null = null;
@@ -137,6 +137,20 @@ export async function POST(request: Request) {
     return unauthorised("A valid bearer token is required to reach this workspace.");
   }
 
+  /*
+   * Where this deployment actually answers, taken from the request rather than
+   * from configuration. Every host puts a proxy in front of the app, so the
+   * forwarded headers are the real address; `request.url` is the internal one.
+   */
+  const host =
+    request.headers.get("x-forwarded-host")?.split(",")[0].trim() ||
+    request.headers.get("host")?.trim() ||
+    new URL(request.url).host;
+  const scheme =
+    request.headers.get("x-forwarded-proto")?.split(",")[0].trim() ||
+    (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+  const origin = `${scheme}://${host}`;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -153,7 +167,7 @@ export async function POST(request: Request) {
   const replies: JSONRPCMessage[] = [];
   for (const message of messages) {
     try {
-      const reply = await handle(message as JSONRPCMessage);
+      const reply = await handle(message as JSONRPCMessage, origin);
       if (reply) replies.push(reply);
     } catch (error) {
       replies.push({

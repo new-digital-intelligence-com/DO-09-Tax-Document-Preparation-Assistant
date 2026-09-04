@@ -132,7 +132,15 @@ const WORKSPACE_ARG = {
     .describe("Omit when only one workspace exists; required when there are several."),
 };
 
-export function registerTools(server: McpServer): void {
+/**
+ * The public origin of this deployment, worked out from the request that asked.
+ *
+ * An environment variable would be one more thing to set, one more thing to get
+ * wrong, and a wrong value produces a curl command pointing at a host that does
+ * not exist — which fails in a way nobody would connect back to a config
+ * setting. The request already knows where it arrived.
+ */
+export function registerTools(server: McpServer, origin: string): void {
   /* ── Workspace ──────────────────────────────────────────────────────── */
 
   server.registerTool(
@@ -357,7 +365,7 @@ export function registerTools(server: McpServer): void {
           filename,
           mimeType: mimeType || "application/pdf",
         });
-        const base = process.env.PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+        const base = origin.replace(/\/$/, "");
 
         return {
           uploadUrl: `${base}/api/upload/${ticket}`,
