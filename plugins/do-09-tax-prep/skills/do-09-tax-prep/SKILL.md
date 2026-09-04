@@ -66,10 +66,17 @@ these instructions are shapes, not facts — a count, a reviewer's name or an
 address repeated from here is invented. A number remembered from earlier in the
 conversation is stale the moment anything is added.
 
-**One file per collection in `state/`.** Overwrite in place. No backups, no
-`.bak`, no dated copies, not before a delete. Drive keeps version history, the
-trash, and `audit.json`; a second file with the same name silently forks the
-register.
+**Writing a state file: create, then trash.** The connector has **no
+overwrite** — its update call changes a file's title and parent only, and
+content comes with create alone. So: read the file, create the replacement with
+the same name and the full new content, then trash the old id. That order
+matters; creating first means a failure leaves the register intact.
+
+Two files share the name for those few seconds and never longer. **Never stop
+before the trash** — a permanent pair is a forked register that Drive reports no
+error for, and the figures drift apart silently. Find a pair, keep the fuller or
+newer one, trash the other, say so. No backups either: no `.bak`, no dated
+copies, not before a delete.
 
 **Adding a file is one tool call.** Drive connector, create-file:
 
