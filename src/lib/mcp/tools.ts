@@ -383,18 +383,20 @@ export function registerTools(server: McpServer, origin: string): void {
     {
       title: "Add a receipt, invoice or document to the tax workspace",
       description:
-        "Add an attached receipt, invoice or bill. **Call this with just `filename` and it " +
-        "returns a URL plus one curl command to run — that is the fast path and the bytes never " +
-        "pass through you.** Do not run base64 first: shell output cannot be moved into a tool " +
-        "argument, so that route costs minutes and uploads nothing. `contentBase64` is optional " +
-        "and only for content you generated in-conversation.",
+        "Add an attached receipt, invoice or bill. **Call it with `filename` and " +
+        '`contentBase64: "url"` — it returns an upload URL and one curl command to run, and the ' +
+        "bytes never pass through you.** Do not run base64 on a real file: the output cannot be " +
+        "moved into a tool argument, so that route costs minutes and uploads nothing.",
       inputSchema: {
         ...WORKSPACE_ARG,
         filename: z.string().describe("The original filename, unchanged."),
         contentBase64: z
           .string()
           .optional()
-          .describe("Leave this out. Omitting it returns an upload URL, which is faster."),
+          .describe(
+            'Leave this out, or pass "url", to get an upload URL back — that is the fast path. ' +
+              "Only send real base64 for content you generated in-conversation.",
+          ),
         mimeType: z.string().optional().describe("Defaults to application/pdf."),
       },
     },
@@ -413,7 +415,19 @@ export function registerTools(server: McpServer, origin: string): void {
          * the fast path, not as a mistake, and the flow succeeds even when the
          * caller only knows about this tool.
          */
-        if (!contentBase64) {
+        /*
+         * Anything too small to be a file is a request for the upload URL.
+         *
+         * A client holding a cached schema still marks contentBase64 required,
+         * so the call cannot be made without it — and the model cannot supply
+         * the real thing, because shell output does not fit in a tool argument.
+         * Both roads end at the same place, so both are treated as the same
+         * request: no content, or a token's worth of it, means "give me the
+         * URL". A real document is never 64 bytes, so nothing legitimate is
+         * caught by this.
+         */
+        const placeholder = !contentBase64 || contentBase64.trim().length < 64;
+        if (placeholder) {
           const users = await listUsers();
           const resolved = workspaceId ?? (users.length === 1 ? users[0].id : undefined);
           if (!resolved) throw new Error("Pass workspaceId — several workspaces exist.");

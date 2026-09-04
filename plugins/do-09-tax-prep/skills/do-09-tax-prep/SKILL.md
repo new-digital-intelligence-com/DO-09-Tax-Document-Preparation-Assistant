@@ -32,7 +32,7 @@ then pass `workspaceId`. None → `create_workspace`.
 
 | They want | Call |
 |---|---|
-| Add an attached receipt | `do-09-tax-prep:upload_document` → it returns a URL → run the one `curl` it gives you, which prints the finished result. **Never base64 the file** — shell output cannot be moved into a tool argument, which is why that route burns minutes and uploads nothing. **Never use another connector's uploader.** |
+| Add an attached receipt | Call `do-09-tax-prep:add_document` with the filename and `contentBase64: "url"`. It returns an upload URL and one `curl` — run that, and it prints the finished result. **Never base64 a real file**: shell output cannot be moved into a tool argument, so that route burns minutes and uploads nothing. **Never use another connector's uploader.** |
 | Add files from their Drive | `search_my_drive` → offer as options → `import_from_drive` |
 | Pick up something dropped in the folder | `sync_drive_folder` |
 | Where things stand | `period_status` |
