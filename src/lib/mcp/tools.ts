@@ -381,34 +381,61 @@ export function registerTools(server: McpServer, origin: string): void {
   server.registerTool(
     "add_document",
     {
-      title: "Add a document from bytes you already hold",
+      title: "Add a receipt, invoice or document to the tax workspace",
       description:
-        "Only for content you can already produce as text — a file you generated yourself. " +
-        "**For anything on disk, including every attachment, use upload_document instead**: " +
-        "base64 of a real file is thousands of tokens you would have to type out, and running " +
-        "`base64` in a shell does not help because its output cannot be moved into this argument.",
+        "Add an attached receipt, invoice or bill. **Call this with just `filename` and it " +
+        "returns a URL plus one curl command to run — that is the fast path and the bytes never " +
+        "pass through you.** Do not run base64 first: shell output cannot be moved into a tool " +
+        "argument, so that route costs minutes and uploads nothing. `contentBase64` is optional " +
+        "and only for content you generated in-conversation.",
       inputSchema: {
         ...WORKSPACE_ARG,
-        filename: z.string(),
-        contentBase64: z.string().min(1).describe("The file's bytes, base64 encoded."),
+        filename: z.string().describe("The original filename, unchanged."),
+        contentBase64: z
+          .string()
+          .optional()
+          .describe("Leave this out. Omitting it returns an upload URL, which is faster."),
         mimeType: z.string().optional().describe("Defaults to application/pdf."),
       },
     },
     async ({ workspaceId, filename, contentBase64, mimeType }) =>
       guard2(workspaceId, "That document could not be added.", async () => {
-        const bytes = Buffer.from(contentBase64, "base64");
-        if (bytes.length === 0) {
-          throw new Error(
-            "contentBase64 decoded to nothing. If the file is on disk, use upload_document — " +
-              "it takes a path and needs no encoding.",
-          );
+        const type = mimeType || "application/pdf";
+
+        /*
+         * No content means hand back an upload URL rather than an error.
+         *
+         * A model cannot supply base64 of a real file: it can run the command,
+         * but the output lands in a terminal and moving it into this argument
+         * means retyping thousands of tokens, which does not happen. What
+         * happens instead is the call arrives with the field missing — which is
+         * exactly the shape below. So that shape is treated as a request for
+         * the fast path, not as a mistake, and the flow succeeds even when the
+         * caller only knows about this tool.
+         */
+        if (!contentBase64) {
+          const users = await listUsers();
+          const resolved = workspaceId ?? (users.length === 1 ? users[0].id : undefined);
+          if (!resolved) throw new Error("Pass workspaceId — several workspaces exist.");
+
+          const ticket = mintUploadTicket({ workspaceId: resolved, filename, mimeType: type });
+          const url = `${origin.replace(/\/$/, "")}/api/upload/${ticket}`;
+          return {
+            next: "Run this one command. It prints the finished result — report that.",
+            run: `curl -sS -X PUT --data-binary @<path-to-${filename}> "${url}"`,
+            uploadUrl: url,
+            expiresInMinutes: 10,
+          };
         }
+
+        const bytes = Buffer.from(contentBase64, "base64");
+        if (bytes.length === 0) throw new Error("contentBase64 decoded to nothing.");
 
         const period = await activePeriod();
         const { doc, duplicateOf } = await ingest({
           filename,
           bytes,
-          mimeType: mimeType || "application/pdf",
+          mimeType: type,
           source: "upload",
           sourceDetail: "Added through Claude",
           periodId: period.id,
