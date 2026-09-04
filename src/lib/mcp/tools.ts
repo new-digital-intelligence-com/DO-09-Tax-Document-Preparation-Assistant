@@ -14,7 +14,7 @@ import {
 import { detect, listExceptions } from "../exceptions";
 import { sendMail } from "../gmail";
 import { listExtractions } from "../extract";
-import { getForm, listForms, renderFormMarkdown } from "../forms";
+import { generateAllForms, getForm, listForms, renderFormMarkdown } from "../forms";
 import {
   personalFileMeta,
   readPersonalFile,
@@ -616,15 +616,43 @@ export function registerTools(server: McpServer, origin: string): void {
         status: z.enum(["open", "resolved", "accepted"]).optional(),
         severity: z.enum(["high", "medium", "low"]).optional(),
         docId: z.string().optional(),
+        limit: z.number().optional().describe("Default 40, highest severity first."),
       },
     },
-    async ({ workspaceId, status, severity, docId }) =>
+    async ({ workspaceId, status, severity, docId, limit }) =>
       guard2(workspaceId, "The findings could not be read.", async () => {
         const period = await activePeriod();
         let rows = await listExceptions({ periodId: period.id, docId });
         if (status) rows = rows.filter((r) => r.status === status);
         if (severity) rows = rows.filter((r) => r.severity === severity);
-        return { total: rows.length, findings: rows };
+
+        /*
+         * Bounded, and bounded by severity rather than by insertion order.
+         *
+         * Each finding carries a paragraph of detail and a paragraph of
+         * suggested action, so a period with a few hundred of them returns
+         * more than a caller can hold — and the ones it would drop by
+         * accident are the ones that mattered. Sorting first means a
+         * truncated answer is still the worst of what is wrong, and `total`
+         * says what was left behind so nobody reads a page as the whole list.
+         */
+        const rank = { high: 0, medium: 1, low: 2 } as const;
+        rows = [...rows].sort((a, b) => rank[a.severity] - rank[b.severity]);
+
+        const cap = Math.max(1, Math.min(limit ?? 40, 200));
+        const page = rows.slice(0, cap);
+        return {
+          total: rows.length,
+          showing: page.length,
+          ...(page.length < rows.length
+            ? {
+                note:
+                  `${rows.length - page.length} more not shown. Say so rather than reporting ` +
+                  `${page.length} as the whole list; narrow with status, severity or docId.`,
+              }
+            : {}),
+          findings: page,
+        };
       }),
   );
 
@@ -650,15 +678,25 @@ export function registerTools(server: McpServer, origin: string): void {
     {
       title: "Draft the tax forms",
       description:
-        "Schedule C, the 1099-NEC summary and the 1040-ES worksheet, computed from the " +
-        "categorised documents. Every adjusted line says why. **Say the word draft whenever you " +
-        "quote a figure off one** — nothing here is filed or filable.",
+        "Schedule C, the 1099-NEC summary and the 1040-ES worksheet, recomputed from the " +
+        "documents as they stand right now. Every adjusted line says why. **Say the word draft " +
+        "whenever you quote a figure off one** — nothing here is filed or filable.",
       inputSchema: { ...WORKSPACE_ARG },
     },
     async ({ workspaceId }) =>
       guard2(workspaceId, "The drafts could not be generated.", async () => {
         const period = await activePeriod();
-        const forms = await listForms(period.id);
+
+        /*
+         * Generated, not read back.
+         *
+         * `listForms` returns whatever was computed last, which for a caller
+         * that has just added a receipt is a figure from before it existed —
+         * wrong, silently, in the one workflow this tool is named for. The
+         * console's own Draft button posts to `generateAllForms`; so does
+         * `assemble_package`. This is the third caller and it gets the same.
+         */
+        const forms = await generateAllForms(period.id, preparer());
         return {
           forms: forms.map((f) => ({
             formId: f.formId,
@@ -705,8 +743,31 @@ export function registerTools(server: McpServer, origin: string): void {
       guard2(workspaceId, "The package could not be assembled.", async () => {
         const period = await activePeriod();
         const pkg = await assemble(period.id, preparer(), { summary });
-        const forms = await listForms(period.id);
-        return { package: pkg, markdown: renderPackageMarkdown(pkg, forms) };
+
+        /*
+         * A description of the pack, not the pack.
+         *
+         * The whole thing is the rendered markdown plus a row per document —
+         * seventy kilobytes here, and it grows with the corpus. Returned in
+         * full it either overruns the client's limit outright or spends the
+         * caller's remaining context on a document index they already have
+         * `list_documents` for. The pack itself is written to Drive, which is
+         * where a reviewer opens it; what a caller needs back is what it
+         * contains and enough to hand it on.
+         */
+        return {
+          packageId: pkg.id,
+          createdAt: pkg.createdAt,
+          summary: pkg.summary,
+          counts: pkg.counts,
+          documentsIncluded: pkg.documentIndex.length,
+          openItems: pkg.openExceptionIds.length,
+          formsIncluded: pkg.formDraftIds,
+          categoryTotals: pkg.categoryTotals,
+          next:
+            "The pack is saved in the workspace's output folder. Report the open-item count " +
+            "before any figure; send it with send_package or record it with hand_off_package.",
+        };
       }),
   );
 

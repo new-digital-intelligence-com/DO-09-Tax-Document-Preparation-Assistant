@@ -227,7 +227,18 @@ export async function purgeDocument(
   if (!doc) throw new Error(`No document ${id} on the register.`);
 
   await removeDocument(id, actor, reason);
-  const cacheCleared = await dropCachedResult(doc.sha256);
+
+  /*
+   * The cached reading is keyed by content, so it belongs to the bytes rather
+   * than to this row — and two documents can hold the same bytes. Dropping it
+   * unconditionally destroys a reading a surviving duplicate still relies on:
+   * the register keeps its figures, but the next re-read pays for a model call
+   * that was already paid for, and the trail claims a deliberate purge.
+   *
+   * So it goes only when nothing else on the register carries that hash.
+   */
+  const stillHeld = (await listDocuments()).some((other) => other.sha256 === doc.sha256);
+  const cacheCleared = stillHeld ? false : await dropCachedResult(doc.sha256);
 
   if (cacheCleared) {
     await record({
