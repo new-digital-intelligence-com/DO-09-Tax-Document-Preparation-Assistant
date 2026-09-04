@@ -12,6 +12,7 @@ import {
   sourceBreakdown,
 } from "../documents";
 import { detect, listExceptions } from "../exceptions";
+import { sendMail } from "../gmail";
 import { listExtractions } from "../extract";
 import { getForm, listForms, renderFormMarkdown } from "../forms";
 import {
@@ -20,7 +21,7 @@ import {
   searchPersonalDrive,
   accountConnection,
 } from "../google-account";
-import { assemble, handOff, listPackages, renderPackageMarkdown } from "../packages";
+import { assemble, getPackage, handOff, listPackages, renderPackageMarkdown } from "../packages";
 import { activePeriod, preparer, savePeriod, taxManager } from "../settings";
 import { createUser, listUsers } from "../users";
 import { processDocument, purgeDocument, syncFromDrive } from "../workspace-sync";
@@ -634,6 +635,102 @@ export function registerTools(server: McpServer): void {
       guard2(workspaceId, "The handoff could not be recorded.", async () => {
         const recipient = to ?? taxManager();
         return await handOff({ packageId, actor: preparer(), to: recipient, note });
+      }),
+  );
+
+  server.registerTool(
+    "send_package",
+    {
+      title: "Email the package to the reviewer",
+      description:
+        "Sends the pack from the workspace owner's own address and records the handoff in the " +
+        "same act — so the register can never say a review is under way that nobody was told " +
+        "about. Requires their Google account to be connected with send permission; " +
+        "connection_status says whether it is. **Confirm the recipient with the user first.** " +
+        "There is no draft mode: the tax manager receives whatever you send, so never call this " +
+        "to check that it works.",
+      inputSchema: {
+        ...WORKSPACE_ARG,
+        packageId: z.string(),
+        to: z.string().optional().describe("Defaults to the configured tax manager."),
+        cc: z.string().optional(),
+        note: z.string().min(1).describe("What the reviewer should know. Required."),
+      },
+    },
+    async ({ workspaceId, packageId, to, cc, note }) =>
+      guard2(workspaceId, "The package could not be sent.", async () => {
+        const connection = await accountConnection();
+        if (!connection.connected || !connection.can.gmailSend) {
+          throw new Error(
+            connection.connected
+              ? "That account is connected but was not granted permission to send mail. " +
+                "Reconnect it from the console and approve sending."
+              : "No Google account is connected to this workspace, so there is no address to " +
+                "send from. Connect one from the console first.",
+          );
+        }
+
+        const pkg = await getPackage(packageId);
+        if (!pkg) throw new Error(`No package with id ${packageId}.`);
+
+        const recipient = (to ?? taxManager()).trim();
+        if (!recipient || recipient.includes("example.invalid")) {
+          throw new Error("No recipient. A package with nobody named is one nobody is waiting for.");
+        }
+        if (recipient.toLowerCase() === preparer().trim().toLowerCase()) {
+          throw new Error(
+            "That is the address the pack was prepared under. A second person reviewing it " +
+              "before anything is filed is the whole point of the handoff.",
+          );
+        }
+
+        const period = await activePeriod();
+        const forms = await listForms(period.id);
+        const body = [
+          `${period.label} for ${period.entity} is assembled and ready for your review.`,
+          "",
+          "Everything in this package is a DRAFT. Nothing has been filed, submitted or signed,",
+          "and nothing in this system can do any of those things.",
+          "",
+          `${pkg.counts.documents} documents collected · ${pkg.counts.extracted} read · ` +
+            `${pkg.counts.needsReview} need a decision · ${pkg.counts.openExceptions} items still open.`,
+          `\nFrom ${preparer()}:\n${note}`,
+          "",
+          "----",
+          "",
+          pkg.markdown ?? renderPackageMarkdown(pkg, forms),
+        ].join("\n");
+
+        // The mail goes first. It is the part that can fail for reasons outside
+        // this app, and a handoff recorded against a message that never sent
+        // leaves the register claiming a review nobody was told about.
+        const sent = await sendMail({
+          to: recipient,
+          cc,
+          subject: `DRAFT for review — ${period.label} ${period.entity}`,
+          body,
+        });
+        const handed = await handOff({ packageId, actor: preparer(), to: recipient, note });
+
+        await record({
+          actor: preparer(),
+          action: "package.emailed",
+          subject: pkg.id,
+          result: "ok",
+          periodId: pkg.periodId,
+          detail:
+            `The ${period.label} package was emailed to ${recipient}` +
+            `${cc ? ` (cc ${cc})` : ""} from ${connection.email ?? "the connected account"} as ` +
+            `Gmail message ${sent.id}. It is marked DRAFT throughout and nothing was filed.`,
+        });
+
+        return {
+          sent: true,
+          to: recipient,
+          from: connection.email,
+          messageId: sent.id,
+          package: handed,
+        };
       }),
   );
 

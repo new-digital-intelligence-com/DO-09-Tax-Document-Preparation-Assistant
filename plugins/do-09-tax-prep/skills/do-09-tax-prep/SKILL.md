@@ -36,7 +36,8 @@ do not need any other connector attached.
 | Totals by category | `category_totals`, with `list_categories` for what the rules are |
 | Know what is flagged | `list_findings`, `detect_findings` to recompute |
 | Draft the forms | `draft_forms`, then `get_form` |
-| Assemble the pack | `assemble_package`, then `hand_off_package` |
+| Assemble the pack | `assemble_package` |
+| Send it to the reviewer | `send_package` — confirm the recipient as options first; there is no draft mode. `hand_off_package` records a handoff without sending. |
 | Trace something deleted | `read_audit` with a `query` |
 | Delete a document | `delete_document` — needs a reason, and confirm with them first |
 | Rename the period | `update_period` |
