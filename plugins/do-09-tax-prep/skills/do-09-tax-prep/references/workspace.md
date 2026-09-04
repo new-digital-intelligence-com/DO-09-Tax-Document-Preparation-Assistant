@@ -51,32 +51,29 @@ not there.
 Google account. It is not a fact about the period and there is no question whose
 answer is that file.
 
-## Always start with the workspace
+## Establishing the workspace
 
-**Before anything else — before a search, before a question about a quarter,
-before reading a single document — establish whose workspace you are in.** Every
-figure you will quote belongs to one person's business, and answering out of the
-wrong folder is not a small error: it reports one company's income as another's.
+Every figure belongs to one person's business, so the folder has to be settled
+before you quote anything. That is not the same as always asking.
 
-The steps, in order:
+List the folders directly under the root, then:
 
-1. **List the folders directly under the root.** Each one is a workspace. Skip
-   anything that is not a folder.
-2. **Read each `profile.json`** for the display name. A folder without one still
-   counts — recover a name from the folder name (everything before the last
-   hyphen) and say it is a guess.
-3. **Put them to the user as options**, with what is in each so the choice is
-   recognisable — the entity from `settings.json` and the document count from
-   `state/documents.json` where you can read them cheaply. Always include a
-   final option to **start a new workspace**.
-4. **If they choose a new one, ask for the name** — also as a form, offering
-   nothing but a free-text answer if the tool supports it, or asking plainly if
-   not. Then create `<slug>-<id>/` with `input/`, `output/` and `state/` inside
-   it, and write `profile.json`.
+- **Exactly one** — use it. Name it in your first sentence and get on with the
+  request. There is nothing to choose between, and a question with one answer
+  is friction, not care.
+- **More than one** — ask, as options, before touching anything. Label each with
+  its entity and document count so the choice is recognisable, and include
+  "start a new one". Answering out of the wrong folder reports one company's
+  income as another's.
+- **None** — offer to create one and take the name.
 
-The slug is the name lowercased with runs of non-alphanumerics collapsed to a
-single hyphen. The id is a short random suffix so two people called Sam do not
-collide. `profile.json` is:
+Read `profile.json` for the display name. A folder without one still counts:
+recover a name from the folder name (everything before the last hyphen) and say
+it is a guess.
+
+Creating one: the slug is the name lowercased with runs of non-alphanumerics
+collapsed to a hyphen, plus a short random suffix so two people called Sam do
+not collide. Make `input/`, `output/` and `state/` inside it, and write:
 
 ```json
 {
@@ -88,10 +85,9 @@ collide. `profile.json` is:
 }
 ```
 
-**One workspace for the whole conversation.** Having chosen, say which one you
-are in the first time you report anything from it, and do not silently switch.
-If the user asks about something that is plainly in another workspace, ask
-before crossing — as a form, naming both.
+**One workspace for the whole conversation.** Say which one you are in the first
+time you report anything from it, and do not silently switch. If a request is
+plainly about another, ask before crossing.
 
 ## The folder holds the current state and nothing else
 
@@ -152,43 +148,40 @@ Say which of the two you are looking at whenever the answer is "nothing".
 
 ## Adding a document
 
-### Uploading a file somebody attached
+### A file attached to the conversation
 
-**Upload it yourself. It is one call.** Use the Drive connector's create-file
-with:
+**One call.** Drive connector, create-file:
 
 | Field | Value |
 |---|---|
-| `base64Content` | the file's bytes, base64 encoded — **this is the binary field** |
+| `base64Content` | the file's bytes, base64 — **the binary field** |
 | `contentMimeType` | `application/pdf`, `image/png`, `image/jpeg` |
-| `disableConversionToGoogleType` | `true` |
+| `disableConversionToGoogleType` | `true` — without it Drive turns the upload into a Google Doc |
 | `parentId` | the workspace's `input/` folder id |
 | `title` | the original filename, unchanged |
 
-`textContent` is for UTF-8 and will mangle a PDF. `disableConversionToGoogleType`
-matters more than it looks: without it Drive converts the upload into a Google
-Doc, and the register then points at something that is no longer the document.
+Then: check the stored size matches the source, compute the SHA-256, append the
+row below, read the document, categorise it, write the audit row. Do it; do not
+narrate a plan first.
 
-**Do not route the bytes through anything else** — no shell, no writing the file
-out and reading it back, no splitting it into parts and reassembling them, no
-retrying with a different encoding. Those truncate binary silently.
+`textContent` is for UTF-8 and will mangle a PDF. **Never route the bytes
+through anything else** — no shell, no writing it out and reading it back, no
+splitting into parts, no retrying with a different encoding. Those truncate
+binary silently, and a half-written PDF still gets a filename, a row and a
+total while the document behind them is broken.
 
-**Check the stored size against the source before registering it.** A byte's
-difference means it is corrupt: trash it, say so, and write no row. A
-half-written PDF is worse than no file, because it still gets a filename, a row
-and a total while the document behind them is broken.
+If the size does not match, it is corrupt: trash it, say so, write no row. If a
+second attempt fails the same way, ask them to drag it into `input/` and carry
+on from there.
 
-If an upload genuinely fails twice for a reason you cannot fix, say what
-happened and ask them to drag the file into `input/`. Then carry on from there —
-that is the section below.
+### A file already in `input/`
 
-### Registering a file that is already in `input/`
+Put there by a person or by anything else. Compare `input/` against
+`documents.json` and register what is missing.
 
-This is the normal path, and the one that always works.
-
-1. **Find the file in `input/`** and note its Drive id, name and size.
-2. **Compute its SHA-256** from the file's own bytes, read back from Drive.
-3. Append a row to `state/documents.json`:
+1. Note its Drive id, name and size.
+2. Compute its SHA-256 from the bytes read back from Drive.
+3. Append to `state/documents.json`:
 
 ```json
 {
@@ -206,17 +199,15 @@ This is the normal path, and the one that always works.
 }
 ```
 
-3. **Write an audit row** to `state/audit.json` saying what arrived and from
-   where.
+4. Write an audit row saying what arrived and from where.
 
 **A byte-identical duplicate is ingested, not refused.** Two copies of the same
 invoice is a finding somebody wants: a vendor who billed twice and a folder
 synced twice look identical from here, and only a person can tell them apart.
-Refusing the second copy hides the question.
 
 **Never write to `output/` by hand.** That cache is keyed on the file's hash and
-is what stops a document being read twice. A hand-written entry there teaches
-the app an answer nobody checked.
+is what stops a document being read twice; a hand-written entry teaches the app
+an answer nobody checked.
 
 ## Removing a document
 
