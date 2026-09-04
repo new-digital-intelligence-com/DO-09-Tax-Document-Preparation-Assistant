@@ -124,6 +124,39 @@ async function guard2<T>(
   }
 }
 
+/**
+ * A package described rather than reproduced.
+ *
+ * A pack carries its own rendered markdown and a row per document — seventy
+ * kilobytes at forty-four documents, and it grows with the corpus. Returned
+ * whole it overruns the client's result limit outright, and the caller sees an
+ * error for a pack that built perfectly well; where it does fit, it spends
+ * their remaining context on an index `list_documents` already answers. The
+ * pack is written to Drive, which is where a reviewer opens it. What a caller
+ * needs back is what is in it and enough to hand it on.
+ */
+function packageSummary(pkg: {
+  id: string;
+  createdAt: string;
+  summary?: string;
+  counts: Record<string, number>;
+  documentIndex: unknown[];
+  openExceptionIds: unknown[];
+  formDraftIds: unknown[];
+  categoryTotals: unknown[];
+}) {
+  return {
+    packageId: pkg.id,
+    createdAt: pkg.createdAt,
+    summary: pkg.summary,
+    counts: pkg.counts,
+    documentsIncluded: pkg.documentIndex.length,
+    openItems: pkg.openExceptionIds.length,
+    formsIncluded: pkg.formDraftIds,
+    categoryTotals: pkg.categoryTotals,
+  };
+}
+
 /** Every tool that touches a workspace accepts this. */
 const WORKSPACE_ARG = {
   workspaceId: z
@@ -744,26 +777,8 @@ export function registerTools(server: McpServer, origin: string): void {
         const period = await activePeriod();
         const pkg = await assemble(period.id, preparer(), { summary });
 
-        /*
-         * A description of the pack, not the pack.
-         *
-         * The whole thing is the rendered markdown plus a row per document —
-         * seventy kilobytes here, and it grows with the corpus. Returned in
-         * full it either overruns the client's limit outright or spends the
-         * caller's remaining context on a document index they already have
-         * `list_documents` for. The pack itself is written to Drive, which is
-         * where a reviewer opens it; what a caller needs back is what it
-         * contains and enough to hand it on.
-         */
         return {
-          packageId: pkg.id,
-          createdAt: pkg.createdAt,
-          summary: pkg.summary,
-          counts: pkg.counts,
-          documentsIncluded: pkg.documentIndex.length,
-          openItems: pkg.openExceptionIds.length,
-          formsIncluded: pkg.formDraftIds,
-          categoryTotals: pkg.categoryTotals,
+          ...packageSummary(pkg),
           next:
             "The pack is saved in the workspace's output folder. Report the open-item count " +
             "before any figure; send it with send_package or record it with hand_off_package.",
@@ -789,7 +804,14 @@ export function registerTools(server: McpServer, origin: string): void {
     async ({ workspaceId, packageId, to, note }) =>
       guard2(workspaceId, "The handoff could not be recorded.", async () => {
         const recipient = to ?? taxManager();
-        return await handOff({ packageId, actor: preparer(), to: recipient, note });
+        const handed = await handOff({ packageId, actor: preparer(), to: recipient, note });
+        return {
+          ...packageSummary(handed),
+          handedOffTo: recipient,
+          note,
+          sent: false,
+          detail: "Recorded only. No mail was sent and nothing was filed.",
+        };
       }),
   );
 
@@ -884,7 +906,7 @@ export function registerTools(server: McpServer, origin: string): void {
           to: recipient,
           from: connection.email,
           messageId: sent.id,
-          package: handed,
+          ...packageSummary(handed),
         };
       }),
   );
