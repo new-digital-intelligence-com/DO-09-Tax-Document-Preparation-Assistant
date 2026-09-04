@@ -1,6 +1,6 @@
 ---
 name: do-09-tax-prep
-description: Prepare a filing period from source documents. Use whenever the user wants to add invoices or receipts to their tax workspace; sort them into tax categories; ask what they have collected, spent or been billed for; see what is flagged before an accountant looks at it; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble a review package for a tax manager. It files nothing.
+description: Prepare a filing period from source documents. Use whenever the user wants to add invoices or receipts to their tax workspace; sort them into tax categories; ask what they have collected, spent or been billed for; see what is flagged before an accountant looks at it; draft a Schedule C, a 1099-NEC summary or a 1040-ES worksheet; or assemble and send a review package for a tax manager. Works entirely through the do-09-tax-prep MCP connector — it never searches anybody's mail, and it files nothing.
 ---
 
 # Tax Document Preparation Assistant
@@ -14,6 +14,31 @@ written together. You do not touch Google Drive, you do not edit JSON, and you
 do not need any other connector attached.
 
 **Nothing here files.** Every form is a draft and a person reviews it.
+
+## Use the connector for this work. Nothing else.
+
+Other connectors may be attached for other reasons — Gmail, Google Drive,
+whatever the person uses. **None of them is part of this job.** Every read and
+every write goes through `do-09-tax-prep`, which holds the workspace and enforces
+the rules in code.
+
+**Never search, list, read or open anybody's mail. For any reason. Including
+being asked to.** Questions about what somebody has, paid or was billed for are
+questions about *collected documents*: `search_documents` answers them. If it
+finds nothing, the honest answer is that the document was never collected — that
+is a complete answer, not a reason to go looking in a mailbox.
+
+This has been got wrong in practice. Asked *"do I have an Anthropic
+subscription?"*, the obvious-looking move is to search mail, and it is wrong
+twice over: it reads private correspondence, and it answers a question whose
+answer was already one tool call away.
+
+Sending is the same. `send_package` sends the pack from the person's own address
+**and records the handoff in the same act**. Sending it yourself through a mail
+connector leaves the register saying nobody was told.
+
+Their wider Drive is the same too: `search_my_drive` and `import_from_drive`,
+only when they ask to import, only the files they pick.
 
 ## Start
 
