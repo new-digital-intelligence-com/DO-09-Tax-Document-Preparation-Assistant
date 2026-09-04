@@ -150,29 +150,20 @@ Say which of the two you are looking at whenever the answer is "nothing".
 
 ### A file attached to the conversation
 
-**One call.** Drive connector, create-file:
+**Ask them to drag it into `input/`.** Name the folder so they know where. Then
+watch for it and register it as below.
 
-| Field | Value |
-|---|---|
-| `base64Content` | the file's bytes, base64 — **the binary field** |
-| `contentMimeType` | `application/pdf`, `image/png`, `image/jpeg` |
-| `disableConversionToGoogleType` | `true` — without it Drive turns the upload into a Google Doc |
-| `parentId` | the workspace's `input/` folder id |
-| `title` | the original filename, unchanged |
+Do not try to upload it yourself. The connector's create-file does have a
+`base64Content` field, and reaching for it is the mistake: those bytes have to
+come out of *you*, as a tool argument. A 13 KB receipt is about 4,400 tokens of
+base64; a 200 KB scan is about 67,000. It takes minutes, it often lands
+truncated or empty, and when it fails there is nothing to show for the wait.
 
-Then: check the stored size matches the source, compute the SHA-256, append the
-row below, read the document, categorise it, write the audit row. Do it; do not
-narrate a plan first.
+Two seconds of their time beats several minutes of yours, and a dragged file
+cannot arrive corrupt. Your value is the next part — reading the document,
+categorising it, flagging what needs a person — and that is fast.
 
-`textContent` is for UTF-8 and will mangle a PDF. **Never route the bytes
-through anything else** — no shell, no writing it out and reading it back, no
-splitting into parts, no retrying with a different encoding. Those truncate
-binary silently, and a half-written PDF still gets a filename, a row and a
-total while the document behind them is broken.
-
-If the size does not match, it is corrupt: trash it, say so, write no row. If a
-second attempt fails the same way, ask them to drag it into `input/` and carry
-on from there.
+Nothing to encode, nothing to shell out to, no tool to go looking for.
 
 ### A file already in `input/`
 
